@@ -29,7 +29,10 @@ class CustomGRU_Cell(nn.Module):
 
         rz_gate_out = torch.sigmoid(self.rz_gate(inputs))
         # r_gate_out, z_gate_out = torch.split(rz_gate_out, self.hidden_size, -1)  # Unsupported split axis !
-        r_gate_out, z_gate_out = rz_gate_out[..., :self.hidden_size], rz_gate_out[..., self.hidden_size:]
+        r_gate_out, z_gate_out = (
+            rz_gate_out[..., : self.hidden_size],
+            rz_gate_out[..., self.hidden_size :],
+        )
 
         in_out = self.in_gate(xt)
         hn_out = self.hn_gate(ht_1)
@@ -40,7 +43,9 @@ class CustomGRU_Cell(nn.Module):
 
     def set_weights(self, weight_ih_l0, weight_hh_l0, bias_ih_l0, bias_hh_l0):
         slice_index = self.hidden_size * 2
-        rz_weight = torch.cat((weight_ih_l0[:slice_index], weight_hh_l0[:slice_index]), -1)
+        rz_weight = torch.cat(
+            (weight_ih_l0[:slice_index], weight_hh_l0[:slice_index]), -1
+        )
         rz_bias = bias_ih_l0[:slice_index] + bias_hh_l0[:slice_index]
 
         self.rz_gate.weight.data.copy_(rz_weight)
@@ -61,10 +66,12 @@ class CustomGRU(nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
 
-        self.gru = nn.ModuleList([
-            CustomGRU_Cell(input_size if i == 0 else hidden_size, hidden_size)
-            for i in range(num_layers)
-        ])
+        self.gru = nn.ModuleList(
+            [
+                CustomGRU_Cell(input_size if i == 0 else hidden_size, hidden_size)
+                for i in range(num_layers)
+            ]
+        )
         ...
 
     def forward(self, inputs, states):
@@ -81,7 +88,7 @@ class CustomGRU(nn.Module):
         return gru_out, h_states
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # torch.manual_seed(1)
     input_size, hidden_size, num_layers = 400, 300, 3
 

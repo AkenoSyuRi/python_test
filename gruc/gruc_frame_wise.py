@@ -88,11 +88,13 @@ def get_gruc_network(in_pt_path, win_len, win_inc, fft_len, hidden_layers, hidde
 
     tar_keys = state_dict0.keys()
     for k, v in state_dict1.items():
-        if 'cnn_layer.1' in k:
-            state_dict0[f'cnn_layer.0{k[11:]}'].copy_(v)
-        elif 'cnn_layer.2' in k:
-            state_dict0[f'cnn_layer.1{k[11:]}'].copy_(v)
-        elif k in tar_keys:
+        # if 'cnn_layer.1' in k:
+        #     state_dict0[f'cnn_layer.0{k[11:]}'].copy_(v)
+        # elif 'cnn_layer.2' in k:
+        #     state_dict0[f'cnn_layer.1{k[11:]}'].copy_(v)
+        # elif k in tar_keys:
+        #     state_dict0[k].copy_(v)
+        if k in tar_keys:
             state_dict0[k].copy_(v)
 
     if net.use_fcGRU:
@@ -121,7 +123,7 @@ def infer(in_pt_path: str, in_wav_path: str, out_dir: str, add_window=True):
 
     ana_data = np.zeros(win_len)
     if add_window:
-        window = get_window('hann', win_len)
+        window = get_window('hann', win_len) ** 0.5
     else:
         window = np.ones(win_len)
     output = np.zeros(win_inc)
@@ -141,7 +143,7 @@ def infer(in_pt_path: str, in_wav_path: str, out_dir: str, add_window=True):
                 estimated_mag, h_states = net(torch.FloatTensor(mag), h_states)
                 estimated_mag = estimated_mag.detach().numpy()
                 enhanced_fft = estimated_mag * np.exp(1j * phase)
-                out = np.fft.irfft(enhanced_fft.reshape(-1))
+                out = np.fft.irfft(enhanced_fft.reshape(-1)) * window
 
                 output += out[:win_inc]
                 output = (output * 32768).astype(np.short)
@@ -154,8 +156,9 @@ def infer(in_pt_path: str, in_wav_path: str, out_dir: str, add_window=True):
 
 
 if __name__ == '__main__':
+    torch.set_grad_enabled(False)
     infer(
-        in_pt_path="../data/models/GRUC/GRUC_0817_wSDR_drb_only_pre80ms_ep69.pth",
+        in_pt_path="../data/models/GRUC/GRUC_0819_wSDR_drb_only_rts_0.25_sin_win_ep67.pth",
         in_wav_path="../data/in_data/TB5W_V1.50_RK_DRB_OFF.wav",
         out_dir="../data/out_data/GRUC",
         add_window=True,

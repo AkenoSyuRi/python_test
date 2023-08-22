@@ -1,9 +1,10 @@
+from pathlib import Path
+
 import torch
 import torchaudio
 from torch import nn
 
 from conv_stft import ConvSTFT, ConviSTFT
-from utils.dbg_utils import DbgUtils
 
 
 class GRUC_Network(nn.Module):
@@ -33,7 +34,6 @@ class GRUC_Network(nn.Module):
             dropout=dropout if hidden_layers > 1 else 0,
         )
         self.cnn_layer = nn.Sequential(
-            nn.ZeroPad2d((0, 0, 1, 0)),
             nn.Conv2d(1, 2, kernel_size=(2, 3), stride=(1, 2)),
             nn.BatchNorm2d(2),
             nn.ReLU(),
@@ -53,16 +53,15 @@ class GRUC_Network(nn.Module):
         mag, phase = self.stft(inputs)  # N,F,T
 
         mag_perm = torch.permute(mag, [0, 2, 1])
-        DbgUtils.export_npy_file(mag_perm, "in_mag.npy")
         out = self.input_layer(mag_perm)  # N,T,hidden_units
 
         rnn_out, hstates = self.rnn_layer(out, states)  # N,T,hidden_units
 
         rnn_out = torch.unsqueeze(rnn_out, 1)  # N,C,H,W
-        cnn_out = self.cnn_layer(rnn_out)  # N,C',H,W'
+        cnn_in = torch.nn.functional.pad(rnn_out, (0, 0, 1, 0), "constant", 0)
+        cnn_out = self.cnn_layer(cnn_in)  # N,C',H,W'
         cnn_out = torch.permute(cnn_out, [0, 2, 3, 1])
-        batch_size, n_frames, _, _ = cnn_out.shape
-        cnn_out = torch.reshape(cnn_out, [batch_size, n_frames, -1])  # N,H,W*C
+        cnn_out = torch.flatten(cnn_out, 2)  # N,H,W*C
 
         mask = self.output_layer(cnn_out)  # N,T,hidden_units-2
 
@@ -101,7 +100,9 @@ if __name__ == '0__main__':
 
 if __name__ == '__main__':
     torch.set_grad_enabled(False)
-    in_pt_path = r"../data/models/GRUC/GRUC_0817_wSDR_drb_only_pre80ms_ep69.pth"
+    in_pt_path = r"../data/models/GRUC/GRUC_0819_wSDR_drb_only_rts_0.25_sin_win_ep67.pth"
+    in_wav_path = "../data/in_data/TB5W-(软件版本V1.60-1)开关算法对比_L.wav"
+    out_wav_path = f"../data/out_data/GRUC/{Path(in_wav_path).stem};{Path(in_pt_path).stem};true.wav"
     batch_size, win_len, win_inc, fft_len, hidden_layers, hidden_units = 1, 1024, 512, 1024, 3, 300
 
     net = GRUC_Network(win_len, win_inc, fft_len, hidden_layers, hidden_units)
@@ -109,10 +110,11 @@ if __name__ == '__main__':
     net.load_state_dict(state_dict)
     net.eval()
 
-    inputs, sr = torchaudio.load("../data/in_data/TB5W_V1.50_RK_DRB_OFF.wav")
+    inputs, sr = torchaudio.load(in_wav_path)
     states = torch.zeros(hidden_layers, 1, hidden_units)
 
     output, _, _ = net.forward(inputs, states)
 
-    torchaudio.save("../data/out_data/GRUC/TB5W_V1.50_RK_DRB_OFF;GRUC_0817_ep69_drb_out.wav", output, sr)
+    torchaudio.save(out_wav_path, output, sr)
+    print(out_wav_path)
     ...
