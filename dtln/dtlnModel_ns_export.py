@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -8,18 +9,22 @@ from file_utils import FileUtils
 class SeperationBlock_Stateful(nn.Module):
     def __init__(self, input_size=257, hidden_size=128, dropout=0.25):
         super(SeperationBlock_Stateful, self).__init__()
-        self.rnn1 = nn.LSTM(input_size=input_size,
-                            hidden_size=hidden_size,
-                            num_layers=1,
-                            batch_first=True,
-                            dropout=0.0,
-                            bidirectional=False)
-        self.rnn2 = nn.LSTM(input_size=hidden_size,
-                            hidden_size=hidden_size,
-                            num_layers=1,
-                            batch_first=True,
-                            dropout=0.0,
-                            bidirectional=False)
+        self.rnn1 = nn.LSTM(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=1,
+            batch_first=True,
+            dropout=0.0,
+            bidirectional=False,
+        )
+        self.rnn2 = nn.LSTM(
+            input_size=hidden_size,
+            hidden_size=hidden_size,
+            num_layers=1,
+            batch_first=True,
+            dropout=0.0,
+            bidirectional=False,
+        )
         self.drop = nn.Dropout(dropout)
 
         self.dense = nn.Linear(hidden_size, input_size)
@@ -54,7 +59,9 @@ class Pytorch_DTLN_P1_stateful(nn.Module):
         self.frame_len = frame_len
         self.frame_hop = frame_hop
 
-        self.sep1 = SeperationBlock_Stateful(input_size=(frame_len // 2 + 1), hidden_size=hidden_size, dropout=0.25)
+        self.sep1 = SeperationBlock_Stateful(
+            input_size=(frame_len // 2 + 1), hidden_size=hidden_size, dropout=0.25
+        )
 
         self.fix_ncnn_err = True
 
@@ -86,7 +93,7 @@ class Pytorch_DTLN_P1_stateful(nn.Module):
 class Pytorch_InstantLayerNormalization_NCNN_Compat(nn.Module):
     def __init__(self, channels):
         """
-            Constructor
+        Constructor
         """
         super(Pytorch_InstantLayerNormalization_NCNN_Compat, self).__init__()
         self.epsilon = 1e-7
@@ -118,17 +125,31 @@ class Pytorch_DTLN_P2_stateful(nn.Module):
         super(Pytorch_DTLN_P2_stateful, self).__init__()
         self.frame_len = frame_len
         self.encoder_size = encoder_size
-        self.encoder_conv1 = nn.Conv1d(in_channels=frame_len, out_channels=self.encoder_size,
-                                       kernel_size=1, stride=1, bias=False)
+        self.encoder_conv1 = nn.Conv1d(
+            in_channels=frame_len,
+            out_channels=self.encoder_size,
+            kernel_size=1,
+            stride=1,
+            bias=False,
+        )
 
         # self.encoder_norm1 = nn.InstanceNorm1d(num_features=self.encoder_size, eps=1e-7, affine=True)
-        self.encoder_norm1 = Pytorch_InstantLayerNormalization_NCNN_Compat(channels=self.encoder_size)
+        self.encoder_norm1 = Pytorch_InstantLayerNormalization_NCNN_Compat(
+            channels=self.encoder_size
+        )
 
-        self.sep2 = SeperationBlock_Stateful(input_size=self.encoder_size, hidden_size=hidden_size, dropout=0.25)
+        self.sep2 = SeperationBlock_Stateful(
+            input_size=self.encoder_size, hidden_size=hidden_size, dropout=0.25
+        )
 
         ## TODO with causal padding like in keras,when ksize > 1
-        self.decoder_conv1 = nn.Conv1d(in_channels=self.encoder_size, out_channels=frame_len,
-                                       kernel_size=1, stride=1, bias=False)
+        self.decoder_conv1 = nn.Conv1d(
+            in_channels=self.encoder_size,
+            out_channels=frame_len,
+            kernel_size=1,
+            stride=1,
+            bias=False,
+        )
 
         self.fix_ncnn_err = True
 
@@ -162,18 +183,23 @@ class Pytorch_DTLN_P2_stateful(nn.Module):
 
 
 if __name__ == "__main__":
+    pnnx_exe = r"F:\Tools\pnnx-20230816-windows\pnnx.exe"
+    # opt_exe = r"F:\Projects\CLionProjects\third_party\ncnn\build_vs2022_release\install\bin\ncnnoptimize.exe"
     frame_len, frame_hop, hidden_size, encoder_size = 1024, 512, 128, 512
-    in_pt_path = "data/models/drb_only/dtln_ns_d20230731_wSDR_drb_only_ep44_based_ep100.pth"
-    out_onnx_dir = 'data/export'
+    in_pt_path = "../data/models/drb_only/DTLN_0827_wSDR_drb_only_pre75ms_none_ep41.pth"
+    out_onnx_dir = "../data/export"
 
-    # os.chdir(out_ncnn_dir)
     torch.set_grad_enabled(False)
     FileUtils.ensure_dir(out_onnx_dir)
 
-    model1 = Pytorch_DTLN_P1_stateful(frame_len=frame_len, frame_hop=frame_hop, hidden_size=hidden_size)
-    model2 = Pytorch_DTLN_P2_stateful(frame_len=frame_len, hidden_size=hidden_size, encoder_size=encoder_size)
-    model1.load_state_dict(torch.load(in_pt_path, 'cpu'), strict=False)
-    model2.load_state_dict(torch.load(in_pt_path, 'cpu'), strict=False)
+    model1 = Pytorch_DTLN_P1_stateful(
+        frame_len=frame_len, frame_hop=frame_hop, hidden_size=hidden_size
+    )
+    model2 = Pytorch_DTLN_P2_stateful(
+        frame_len=frame_len, hidden_size=hidden_size, encoder_size=encoder_size
+    )
+    model1.load_state_dict(torch.load(in_pt_path, "cpu"), strict=False)
+    model2.load_state_dict(torch.load(in_pt_path, "cpu"), strict=False)
     model1.eval()
     model2.eval()
 
@@ -184,38 +210,49 @@ if __name__ == "__main__":
         torch.randn(1, 1, hidden_size),
         torch.randn(1, 1, hidden_size),
         torch.randn(1, 1, hidden_size),
-        torch.randn(1, 1, hidden_size)
+        torch.randn(1, 1, hidden_size),
     ]
     h_10, c_10, h_11, c_11 = [
         torch.randn(1, 1, hidden_size),
         torch.randn(1, 1, hidden_size),
         torch.randn(1, 1, hidden_size),
-        torch.randn(1, 1, hidden_size)
+        torch.randn(1, 1, hidden_size),
     ]
 
-    print('=========== exporting onnx model ===========')
-    out_onnx_path1 = FileUtils.name_sub(in_pt_path, ".pth$#_p1.pt", base_dir=out_onnx_dir)
-    out_onnx_path2 = FileUtils.name_sub(in_pt_path, ".pth$#_p2.pt", base_dir=out_onnx_dir)
+    print("=========== exporting onnx model ===========")
+    out_ncnn_paths = [
+        Path(out_onnx_dir) / (Path(in_pt_path).stem + f"_p{i+1}.pt") for i in range(2)
+    ]
     model1 = torch.jit.trace(model1, (input1, h_00, c_00, h_01, c_01))
     model2 = torch.jit.trace(model2, (input2, h_10, c_10, h_11, c_11))
-    model1.save(out_onnx_path1)
-    model2.save(out_onnx_path2)
-
+    model1.save(out_ncnn_paths[0])
+    model2.save(out_ncnn_paths[1])
 
     def get_shapes(*inputs):
-        return ",".join(map(lambda x: str(list(x.shape)), inputs)).replace(' ', '')
+        return ",".join(map(lambda x: str(list(x.shape)), inputs)).replace(" ", "")
 
+    cmds = (
+        f"{pnnx_exe} {out_ncnn_paths[0]} inputshape={get_shapes(input1, h_00, c_00, h_01, c_01)}",
+        f"{pnnx_exe} {out_ncnn_paths[1]} inputshape={get_shapes(input2, h_10, c_10, h_11, c_11)}",
+    )
+    print("####### exporting ncnn model ######")
+    for i in range(2):
+        print(cmds[i])
+        os.system(cmds[i])
 
-    cmd1 = f'pnnx {out_onnx_path1} inputshape={get_shapes(input1, h_00, c_00, h_01, c_01)}'
-    cmd2 = f'pnnx {out_onnx_path2} inputshape={get_shapes(input2, h_10, c_10, h_11, c_11)}'
-    print(cmd1)
-    print(cmd2)
-    print('####### exporting ncnn model ######')
-    os.system(cmd1)
-    os.system(cmd2)
+    cwd = Path.cwd().absolute()
+    os.remove(f"{cwd}/debug.bin")
+    os.remove(f"{cwd}/debug.param")
+    os.remove(f"{cwd}/debug2.bin")
+    os.remove(f"{cwd}/debug2.param")
 
-    os.remove("debug.bin")
-    os.remove("debug.param")
-    os.remove("debug2.bin")
-    os.remove("debug2.param")
+    # print("####### begin ncnn model optimization ######")
+    # for i in range(2):
+    #     parent_name = Path(out_ncnn_paths[i]).parent / Path(out_ncnn_paths[i]).stem
+    #     in_ncnn_param = parent_name.as_posix() + ".ncnn.param"
+    #     in_ncnn_bin = parent_name.as_posix() + ".ncnn.bin"
+    #
+    #     out_ncnn_param = parent_name.as_posix() + "_opt.ncnn.param"
+    #     out_ncnn_bin = parent_name.as_posix() + "_opt.ncnn.bin"
+    #     os.system(f"{opt_exe} {in_ncnn_param} {in_ncnn_bin} {out_ncnn_param} {out_ncnn_bin} 0")
     ...

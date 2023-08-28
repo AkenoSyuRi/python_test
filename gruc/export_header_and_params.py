@@ -24,7 +24,7 @@ struct GRUC_ModelParams {
     static std::unique_ptr<GRUC_ModelParams> Load(const std::string &binFilePath) {
         std::ifstream fp(binFilePath, std::ios::in | std::ios::binary);
         if (!fp.is_open()) {
-            printf("open file failed: %s\n", binFilePath.c_str());
+            printf("open file failed: %%s\\n", binFilePath.c_str());
             abort();
         }
 
@@ -33,7 +33,7 @@ struct GRUC_ModelParams {
         fp.seekg(0, std::ios::beg);
 
         if (sizeof(GRUC_ModelParams) != sizeInBytes) {
-            printf("the size of bin file is different to the sizeof(GRUC_ModelParams): %ld, %llu\n",
+            printf("the size of bin file is different to the sizeof(GRUC_ModelParams): %%ld, %%llu\\n",
                    sizeInBytes, sizeof(GRUC_ModelParams));
             abort();
         }

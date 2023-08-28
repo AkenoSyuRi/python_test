@@ -49,7 +49,7 @@ class GRUC_Network_Deploy(nn.Module):
             nn.ReLU(),
         )
         self.output_layer = nn.Sequential(
-            nn.Linear(hidden_units - 2, self.input_size),
+            nn.Linear(((hidden_units - 3) // 2 + 1) * 2, self.input_size),
             # nn.Sigmoid(),
             nn.Tanh(),
         )
@@ -136,12 +136,6 @@ def get_gruc_network(
 
     tar_keys = state_dict0.keys()
     for k, v in state_dict1.items():
-        # if 'cnn_layer.1' in k:
-        #     state_dict0[f'cnn_layer.0{k[11:]}'].copy_(v)
-        # elif 'cnn_layer.2' in k:
-        #     state_dict0[f'cnn_layer.1{k[11:]}'].copy_(v)
-        # elif k in tar_keys:
-        #     state_dict0[k].copy_(v)
         if k in tar_keys:
             state_dict0[k].copy_(v)
 
@@ -166,10 +160,10 @@ def export_ncnn_by_pnnx(out_pt_path, net, *inputs):
     print(cmd)
     os.system(cmd)
 
-    print("=========== exporting ncnn mem header ===========")
-    base_path = Path(out_pt_path).parent / Path(out_pt_path).stem
-    cmd = f"{ncnn2mem} {base_path}.ncnn.param {base_path}.ncnn.bin {base_path}.id.h {base_path}.mem.h"
-    os.system(cmd)
+    # print("=========== exporting ncnn mem header ===========")
+    # base_path = Path(out_pt_path).parent / Path(out_pt_path).stem
+    # cmd = f"{ncnn2mem} {base_path}.ncnn.param {base_path}.ncnn.bin {base_path}.id.h {base_path}.mem.h"
+    # os.system(cmd)
     ...
 
 
@@ -180,9 +174,9 @@ def export_ncnn():
         512,
         1024,
         3,
-        300,
+        301,
     )
-    in_pt_path = "../data/models/GRUC/GRUC_0819_wSDR_drb_only_rts_0.25_sin_win_ep67.pth"
+    in_pt_path = "../data/models/GRUC/GRUC_0823_wSDR_drb_only_rts_0.05_tam_0.05_ep25.pth"
     out_ncnn_dir = "../data/export"
 
     torch.set_grad_enabled(False)
@@ -279,7 +273,7 @@ if __name__ == "__main__":
         export_ncnn()
     else:
         infer(
-            in_pt_path="../data/models/GRUC/GRUC_0819_wSDR_drb_only_rts_0.25_sin_win_ep67.pth",
+            in_pt_path="../data/models/GRUC/GRUC_0823_wSDR_drb_only_rts_0.05_tam_0.05_ep25.pth",
             in_wav_path="../data/in_data/TB5W_V1.50_RK_DRB_OFF.wav",
             out_dir="../data/out_data/GRUC",
             add_window=True,

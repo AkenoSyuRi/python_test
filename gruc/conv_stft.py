@@ -9,7 +9,7 @@ def init_kernels(win_len, win_inc, fft_len, win_type=None, invers=False):
     if win_type == "None" or win_type is None:
         window = np.ones(win_len)
     else:
-        window = get_window(win_type, win_len, fftbins=True) ** 0.5
+        window = get_window(win_type, win_len, fftbins=True)
 
     N = fft_len
     fourier_basis = np.fft.rfft(np.eye(N))[:win_len]
@@ -121,15 +121,21 @@ def test_fft():
     win_len = 1024
     win_inc = 512
     fft_len = 1024
+    win_type = "hamming"
     inputs = torch.randn([1, 1, 320000])
-    fft = ConvSTFT(win_len, win_inc, fft_len, win_type="hanning", feature_type="real")
+    fft = ConvSTFT(win_len, win_inc, fft_len, win_type=win_type, feature_type="real")
     import librosa
 
     outputs1 = fft(inputs)[0]
     outputs1 = outputs1.numpy()[0]
     np_inputs = inputs.numpy().reshape([-1])
     librosa_stft = librosa.stft(
-        np_inputs, win_length=win_len, n_fft=fft_len, hop_length=win_inc, center=False
+        np_inputs,
+        win_length=win_len,
+        n_fft=fft_len,
+        hop_length=win_inc,
+        window=win_type,
+        center=False,
     )
     print(np.mean((outputs1 - np.abs(librosa_stft)) ** 2))
     ...

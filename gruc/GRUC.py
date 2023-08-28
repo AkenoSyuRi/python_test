@@ -8,7 +8,16 @@ from conv_stft import ConvSTFT, ConviSTFT
 
 
 class GRUC_Network(nn.Module):
-    def __init__(self, win_len, win_inc, fft_len, hidden_layers, hidden_units, win_type='hann', dropout=0.2):
+    def __init__(
+        self,
+        win_len,
+        win_inc,
+        fft_len,
+        hidden_layers,
+        hidden_units,
+        win_type="hann",
+        dropout=0.2,
+    ):
         super().__init__()
         self.win_len = win_len
         self.win_inc = win_inc
@@ -19,8 +28,12 @@ class GRUC_Network(nn.Module):
         self.dropout = dropout
         self.input_size = fft_len // 2 + 1
 
-        self.stft = ConvSTFT(win_len, win_inc, fft_len, win_type=win_type, feature_type='real')
-        self.istft = ConviSTFT(win_len, win_inc, fft_len, win_type=win_type, feature_type='real')
+        self.stft = ConvSTFT(
+            win_len, win_inc, fft_len, win_type=win_type, feature_type="real"
+        )
+        self.istft = ConviSTFT(
+            win_len, win_inc, fft_len, win_type=win_type, feature_type="real"
+        )
 
         self.input_layer = nn.Sequential(
             nn.Linear(self.input_size, hidden_units),
@@ -39,7 +52,7 @@ class GRUC_Network(nn.Module):
             nn.ReLU(),
         )
         self.output_layer = nn.Sequential(
-            nn.Linear(hidden_units - 2, self.input_size),
+            nn.Linear(((hidden_units - 3) // 2 + 1) * 2, self.input_size),
             # nn.Sigmoid(),
             nn.Tanh(),
         )
@@ -72,38 +85,19 @@ class GRUC_Network(nn.Module):
         return outputs, mask, hstates
 
 
-if __name__ == '0__main__':
-    def _print_networks(models: list):
-        print(f"This project contains {len(models)} models, the number of the parameters is: ")
-        params_of_all_networks = 0
-        for idx, model in enumerate(models, start=1):
-            params_of_network = 0
-            for param in model.parameters():
-                if not param.requires_grad:
-                    continue
-                params_of_network += param.numel()
-            print(f"\tNetwork {idx}: {params_of_network / 1e6} million.")
-            params_of_all_networks += params_of_network
-        print(f"The amount of parameters in the project is {params_of_all_networks / 1e6} million.")
-
-
-    batch_size, win_len, win_inc, fft_len, hidden_layers, hidden_units = 4, 1024, 512, 1024, 3, 300
-    net = GRUC_Network(win_len, win_inc, fft_len, hidden_layers, hidden_units)
-    _print_networks([net])
-
-    inputs = torch.randn(batch_size, 320000)
-    states = torch.randn(hidden_layers, batch_size, hidden_units)
-
-    outputs, mask = net(inputs, states)
-    print(outputs.shape, mask.shape)
-    ...
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     torch.set_grad_enabled(False)
-    in_pt_path = r"../data/models/GRUC/GRUC_0819_wSDR_drb_only_rts_0.25_sin_win_ep67.pth"
-    in_wav_path = "../data/in_data/TB5W-(软件版本V1.60-1)开关算法对比_L.wav"
+    in_pt_path = r"../data/models/GRUC/GRUC_0824_wSDR_drb_only_rts_0.05_tam_0.05_401u_ep23.pth"
+    in_wav_path = "../data/in_data/TB5W_V1.50_RK_DRB_OFF.wav"
     out_wav_path = f"../data/out_data/GRUC/{Path(in_wav_path).stem};{Path(in_pt_path).stem};true.wav"
-    batch_size, win_len, win_inc, fft_len, hidden_layers, hidden_units = 1, 1024, 512, 1024, 3, 300
+    batch_size, win_len, win_inc, fft_len, hidden_layers, hidden_units = (
+        1,
+        1024,
+        512,
+        1024,
+        3,
+        401,
+    )
 
     net = GRUC_Network(win_len, win_inc, fft_len, hidden_layers, hidden_units)
     state_dict = torch.load(in_pt_path, "cpu")
