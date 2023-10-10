@@ -13,12 +13,12 @@ def load_and_check(in_wav_path, sr):
 
 
 if __name__ == '__main__':
-    sample_rate = 32000
-    out_wav_path = r"D:\Temp\out1\TB5W_V1.50_RK_DRB_OFF_GRUC_drb_out.wav"
+    sample_rate = 16000
+    out_wav_path = r"D:\Temp\out1\TB5W_V1.50_RK_DRB_OFF_DTLN_drb_out.wav"
     in_wav_path_list = [
-        r"F:\Projects\PycharmProjects\python_test\data\in_data\TB5W_V1.50_RK_DRB_OFF.wav",
-        r"F:\Projects\PycharmProjects\python_test\data\out_data\GRUC\TB5W_V1.50_RK_DRB_OFF_GRUC_drb_out.wav",
-        r"F:\Test\0.audio_test\model_predict_output\TB5W_V1.50_RK_DRB_OFF;dtln_ns_d20230731_wSDR_drb_only_ep44_based_ep100.pth;clamp_min=None.wav"
+        r"F:\Projects\PycharmProjects\python_test\data\in_data\TB5W_V1.50_RK_DRB_OFF_16k.wav",
+        r"F:\Projects\PycharmProjects\python_test\data\out_data\tmp\TB5W_V1.50_RK_DRB_OFF_tflite_out;fp32.wav",
+        r"F:\Projects\PycharmProjects\python_test\data\out_data\tmp\TB5W_V1.50_RK_DRB_OFF_tflite_out;int8.wav"
     ]
     FileUtils.ensure_dir(out_wav_path, is_file=True)
 

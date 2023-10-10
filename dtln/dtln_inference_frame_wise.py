@@ -14,7 +14,7 @@ torch.set_grad_enabled(False)
 
 class Pytorch_DTLN_stateful_frame_wise(nn.Module):
     def __init__(
-        self, frameLength=1024, hopLength=256, hidden_size=128, encoder_size=256
+            self, frameLength=1024, hopLength=256, hidden_size=128, encoder_size=256
     ):
         super(Pytorch_DTLN_stateful_frame_wise, self).__init__()
         self.frame_len = frameLength
@@ -87,8 +87,8 @@ def get_dtln_network(weight_file_path, frame_len, frame_hop, hidden_size, encode
     return model
 
 
-def infer(in_pt_path: str, in_wav_path: str, out_dir: str, add_window=True):
-    frame_len, frame_hop, hidden_size, encoder_size, sr = 1024, 512, 128, 512, 32000
+def infer(in_pt_path: str, in_wav_path: str, out_dir: str, add_window=False):
+    frame_len, frame_hop, hidden_size, encoder_size, sr = 768, 256, 128, 512, 32000
     out_wav_path = Path(
         out_dir, f"{Path(in_wav_path).stem};{Path(in_pt_path).stem};fw.wav"
     ).as_posix()
@@ -123,10 +123,7 @@ def infer(in_pt_path: str, in_wav_path: str, out_dir: str, add_window=True):
         fp.setsampwidth(2)
         fp.setnchannels(1)
         fp.setframerate(sr)
-        for idx, data in enumerate(
-            tqdm(AudioUtils.data_generator(in_wav_path, frame_hop / sr, sr=sr)),
-            1,
-        ):
+        for idx, data in enumerate(tqdm(AudioUtils.data_generator(in_wav_path, frame_hop / sr, sr=sr)), 1):
             ana_data[:-frame_hop] = ana_data[frame_hop:]
             ana_data[-frame_hop:] = data
 
@@ -151,6 +148,7 @@ def infer(in_pt_path: str, in_wav_path: str, out_dir: str, add_window=True):
 
             output += out
             out = (output[:frame_hop] * 32768).astype(np.short)
+            # if idx > 1:
             fp.writeframes(out.tobytes())
             output[:-frame_hop] = output[frame_hop:]
             output[-frame_hop:] = 0
@@ -159,9 +157,9 @@ def infer(in_pt_path: str, in_wav_path: str, out_dir: str, add_window=True):
 
 if __name__ == "__main__":
     infer(
-        in_pt_path="../data/models/drb_only/DTLN_0827_wSDR_drb_only_pre75ms_none_ep41.pth",
-        in_wav_path="../data/in_data/TB5W_V1.50_RK_DRB_OFF.wav",
-        out_dir="../data/out_data/drb_only",
+        in_pt_path=r"F:\Test\1.audio_test\2.in_models\drb\DTLN_0927_wSDR_drb_tam_0.08_rts_0.05_none_8ms_triple_32k_end_1.3_ep30.pth",
+        in_wav_path=r"F:\Test\1.audio_test\1.in_data\TB5W_V1.50_RK_DRB_OFF.wav",
+        out_dir=r"F:\Test\1.audio_test\3.out_data\tmp",
         add_window=False,
     )
     ...

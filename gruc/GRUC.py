@@ -9,14 +9,14 @@ from conv_stft import ConvSTFT, ConviSTFT
 
 class GRUC_Network(nn.Module):
     def __init__(
-        self,
-        win_len,
-        win_inc,
-        fft_len,
-        hidden_layers,
-        hidden_units,
-        win_type="hann",
-        dropout=0.2,
+            self,
+            win_len,
+            win_inc,
+            fft_len,
+            hidden_layers,
+            hidden_units,
+            win_type="hann",
+            dropout=0.2,
     ):
         super().__init__()
         self.win_len = win_len
@@ -85,24 +85,33 @@ class GRUC_Network(nn.Module):
         return outputs, mask, hstates
 
 
+def load_state_dict(net, in_state_dict):
+    net_state_dict = net.state_dict()
+    for k, v in net_state_dict.items():
+        torch.nn.init.zeros_(v)
+        if "cnn_layer.0" in k:
+            v.copy_(in_state_dict[k.replace("cnn_layer.0", "cnn_layer.1")])
+        elif "cnn_layer.1" in k:
+            v.copy_(in_state_dict[k.replace("cnn_layer.1", "cnn_layer.2")])
+        else:
+            v.copy_(in_state_dict[k])
+            ...
+    net.eval()
+    ...
+
+
 if __name__ == "__main__":
     torch.set_grad_enabled(False)
-    in_pt_path = r"../data/models/GRUC/GRUC_0824_wSDR_drb_only_rts_0.05_tam_0.05_401u_ep23.pth"
-    in_wav_path = "../data/in_data/TB5W_V1.50_RK_DRB_OFF.wav"
-    out_wav_path = f"../data/out_data/GRUC/{Path(in_wav_path).stem};{Path(in_pt_path).stem};true.wav"
-    batch_size, win_len, win_inc, fft_len, hidden_layers, hidden_units = (
-        1,
-        1024,
-        512,
-        1024,
-        3,
-        401,
-    )
+    in_pt_path = r"F:\Test\1.audio_test\2.in_models\drb\GRUC_0824_wSDR_drb_only_rts_0.05_tam_0.05_401u_ep70.pth"
+    in_wav_path = r"F:\Test\1.audio_test\1.in_data\TB5W_V1.50_RK_DRB_OFF.wav"
+    out_wav_path = rf"F:\Test\1.audio_test\3.out_data\drb/{Path(in_wav_path).stem};{Path(in_pt_path).stem};true.wav"
+    batch_size, win_len, win_inc, fft_len, hidden_layers, hidden_units = (1, 1024, 512, 1024, 3, 401)
 
     net = GRUC_Network(win_len, win_inc, fft_len, hidden_layers, hidden_units)
     state_dict = torch.load(in_pt_path, "cpu")
     net.load_state_dict(state_dict)
     net.eval()
+    # load_state_dict(net, state_dict)
 
     inputs, sr = torchaudio.load(in_wav_path)
     states = torch.zeros(hidden_layers, 1, hidden_units)

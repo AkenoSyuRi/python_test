@@ -3,7 +3,6 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-from file_utils import FileUtils
 
 
 class SeperationBlock_Stateful(nn.Module):
@@ -182,15 +181,23 @@ class Pytorch_DTLN_P2_stateful(nn.Module):
         return decoded_frame, out_state2
 
 
+def load_random_weights(net):
+    state_dict = net.state_dict()
+    for v in state_dict.values():
+        weights = torch.rand(v.shape)
+        v.copy_(weights)
+    ...
+
+
 if __name__ == "__main__":
+    frame_len, frame_hop, hidden_size, encoder_size, random_weights = 1024, 512, 128, 512, bool(0)
+    in_pt_path = r"F:\Test\1.audio_test\2.in_models\drb\DTLN_0918_wSDR_drb_rts_0.05_tam_0.07_none_16ms_half_allreverb_ep67.pth"
+    out_ncnn_dir = Path(r"F:\Test\1.audio_test\4.out_models\drb", Path(in_pt_path).stem.replace("-", "_"))
     pnnx_exe = r"F:\Tools\pnnx-20230816-windows\pnnx.exe"
-    # opt_exe = r"F:\Projects\CLionProjects\third_party\ncnn\build_vs2022_release\install\bin\ncnnoptimize.exe"
-    frame_len, frame_hop, hidden_size, encoder_size = 1024, 512, 128, 512
-    in_pt_path = "../data/models/drb_only/DTLN_0827_wSDR_drb_only_pre75ms_none_ep41.pth"
-    out_onnx_dir = "../data/export"
+    opt_exe = r"F:\Projects\CLionProjects\third_party\ncnn\build_vs2022_release\install\bin\ncnnoptimize.exe"
 
     torch.set_grad_enabled(False)
-    FileUtils.ensure_dir(out_onnx_dir)
+    out_ncnn_dir.mkdir(parents=True, exist_ok=True)
 
     model1 = Pytorch_DTLN_P1_stateful(
         frame_len=frame_len, frame_hop=frame_hop, hidden_size=hidden_size
@@ -198,8 +205,12 @@ if __name__ == "__main__":
     model2 = Pytorch_DTLN_P2_stateful(
         frame_len=frame_len, hidden_size=hidden_size, encoder_size=encoder_size
     )
-    model1.load_state_dict(torch.load(in_pt_path, "cpu"), strict=False)
-    model2.load_state_dict(torch.load(in_pt_path, "cpu"), strict=False)
+    if random_weights:
+        load_random_weights(model1)
+        load_random_weights(model2)
+    else:
+        model1.load_state_dict(torch.load(in_pt_path, "cpu"), strict=False)
+        model2.load_state_dict(torch.load(in_pt_path, "cpu"), strict=False)
     model1.eval()
     model2.eval()
 
@@ -219,17 +230,20 @@ if __name__ == "__main__":
         torch.randn(1, 1, hidden_size),
     ]
 
-    print("=========== exporting onnx model ===========")
+    print("=========== exporting ncnn model ===========")
     out_ncnn_paths = [
-        Path(out_onnx_dir) / (Path(in_pt_path).stem + f"_p{i+1}.pt") for i in range(2)
+        Path(out_ncnn_dir) / (Path(in_pt_path).stem + f"_p{i + 1}.pt")
+        for i in range(2)
     ]
     model1 = torch.jit.trace(model1, (input1, h_00, c_00, h_01, c_01))
     model2 = torch.jit.trace(model2, (input2, h_10, c_10, h_11, c_11))
     model1.save(out_ncnn_paths[0])
     model2.save(out_ncnn_paths[1])
 
+
     def get_shapes(*inputs):
         return ",".join(map(lambda x: str(list(x.shape)), inputs)).replace(" ", "")
+
 
     cmds = (
         f"{pnnx_exe} {out_ncnn_paths[0]} inputshape={get_shapes(input1, h_00, c_00, h_01, c_01)}",
@@ -241,6 +255,7 @@ if __name__ == "__main__":
         os.system(cmds[i])
 
     cwd = Path.cwd().absolute()
+    print("cwd:", cwd)
     os.remove(f"{cwd}/debug.bin")
     os.remove(f"{cwd}/debug.param")
     os.remove(f"{cwd}/debug2.bin")
@@ -254,5 +269,5 @@ if __name__ == "__main__":
     #
     #     out_ncnn_param = parent_name.as_posix() + "_opt.ncnn.param"
     #     out_ncnn_bin = parent_name.as_posix() + "_opt.ncnn.bin"
-    #     os.system(f"{opt_exe} {in_ncnn_param} {in_ncnn_bin} {out_ncnn_param} {out_ncnn_bin} 0")
+    #     os.system(f"{opt_exe} {in_ncnn_param} {in_ncnn_bin} {out_ncnn_param} {out_ncnn_bin} 65536")
     ...
