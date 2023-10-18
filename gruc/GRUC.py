@@ -102,10 +102,10 @@ def load_state_dict(net, in_state_dict):
 
 if __name__ == "__main__":
     torch.set_grad_enabled(False)
-    in_pt_path = r"F:\Test\1.audio_test\2.in_models\drb\GRUC_0824_wSDR_drb_only_rts_0.05_tam_0.05_401u_ep70.pth"
-    in_wav_path = r"F:\Test\1.audio_test\1.in_data\TB5W_V1.50_RK_DRB_OFF.wav"
-    out_wav_path = rf"F:\Test\1.audio_test\3.out_data\drb/{Path(in_wav_path).stem};{Path(in_pt_path).stem};true.wav"
-    batch_size, win_len, win_inc, fft_len, hidden_layers, hidden_units = (1, 1024, 512, 1024, 3, 401)
+    in_pt_path = r"F:\Test\1.audio_test\2.in_models\tmp_gruc\model_0040.pth"
+    in_wav_path = r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪关闭.wav"
+    out_wav_path = rf"F:\Test\1.audio_test\3.out_data\tmp_gruc/{Path(in_wav_path).stem};{Path(in_pt_path).stem};true.wav"
+    batch_size, win_len, win_inc, fft_len, hidden_layers, hidden_units = (1, 1024, 512, 1024, 3, 300)
 
     net = GRUC_Network(win_len, win_inc, fft_len, hidden_layers, hidden_units)
     state_dict = torch.load(in_pt_path, "cpu")

@@ -5,11 +5,11 @@ import torch.nn.functional as F
 from scipy.signal import get_window
 
 
-def init_kernels(win_len, win_inc, fft_len, win_type=None, invers=False):
-    if win_type == "None" or win_type is None:
+def init_kernels(win_len, win_inc, fft_len, win_type=None, inverse=False):
+    if win_type is None or win_type.lower() == "none":
         window = np.ones(win_len)
     else:
-        window = get_window(win_type, win_len, fftbins=True)
+        window = get_window(win_type, win_len, fftbins=True)  # **0.5
 
     N = fft_len
     fourier_basis = np.fft.rfft(np.eye(N))[:win_len]
@@ -17,7 +17,7 @@ def init_kernels(win_len, win_inc, fft_len, win_type=None, invers=False):
     imag_kernel = np.imag(fourier_basis)
     kernel = np.concatenate([real_kernel, imag_kernel], 1).T
 
-    if invers:
+    if inverse:
         kernel = np.linalg.pinv(kernel).T
 
     kernel = kernel * window
@@ -33,19 +33,19 @@ class ConvSTFT(nn.Module):
         win_len,
         win_inc,
         fft_len=None,
-        win_type="hann",
+        win_type="hamming",
         feature_type="real",
-        fix=True,
     ):
         super(ConvSTFT, self).__init__()
 
         if fft_len is None:
-            self.fft_len = np.int(2 ** np.ceil(np.log2(win_len)))
+            self.fft_len = int(2 ** np.ceil(np.log2(win_len)))
         else:
             self.fft_len = fft_len
 
         kernel, _ = init_kernels(win_len, win_inc, self.fft_len, win_type)
-        self.weight = nn.Parameter(kernel, requires_grad=(not fix))
+        # self.weight = nn.Parameter(kernel, requires_grad=(not fix))
+        self.register_buffer("weight", kernel)
         self.feature_type = feature_type
         self.stride = win_inc
         self.win_len = win_len
@@ -54,7 +54,7 @@ class ConvSTFT(nn.Module):
     def forward(self, inputs):
         if inputs.dim() == 2:
             inputs = torch.unsqueeze(inputs, 1)
-
+        inputs = F.pad(inputs, [self.win_len - self.stride, self.win_len - self.stride])
         outputs = F.conv1d(inputs, self.weight, stride=self.stride)
 
         if self.feature_type == "complex":
@@ -76,21 +76,21 @@ class ConviSTFT(nn.Module):
         fft_len=None,
         win_type="hamming",
         feature_type="real",
-        fix=True,
     ):
         super(ConviSTFT, self).__init__()
         if fft_len is None:
-            self.fft_len = np.int(2 ** np.ceil(np.log2(win_len)))
+            self.fft_len = int(2 ** np.ceil(np.log2(win_len)))
         else:
             self.fft_len = fft_len
         kernel, window = init_kernels(
-            win_len, win_inc, self.fft_len, win_type, invers=True
+            win_len, win_inc, self.fft_len, win_type, inverse=True
         )
-        self.weight = nn.Parameter(kernel, requires_grad=(not fix))
+        # self.weight = nn.Parameter(kernel, requires_grad=(not fix))
+        self.register_buffer("weight", kernel)
         self.feature_type = feature_type
         self.win_type = win_type
         self.win_len = win_len
-        self.win_inc = win_inc
+        self.stride = win_inc
         self.stride = win_inc
         self.dim = self.fft_len
         self.register_buffer("window", window)
@@ -111,8 +111,12 @@ class ConviSTFT(nn.Module):
         # this is from torch-stft: https://github.com/pseeth/torch-stft
         t = self.window.repeat(1, 1, inputs.size(-1)) ** 2
         coff = F.conv_transpose1d(t, self.enframe, stride=self.stride)
-        # outputs = torch.where(coff == 0, outputs, outputs/coff)
         outputs = outputs / (coff + 1e-8)
+        # outputs = torch.where(coff == 0, outputs, outputs/coff)
+        outputs = outputs[
+            ..., self.win_len - self.stride : -(self.win_len - self.stride)
+        ]
+
         return outputs
 
 
@@ -121,46 +125,45 @@ def test_fft():
     win_len = 1024
     win_inc = 512
     fft_len = 1024
-    win_type = "hamming"
-    inputs = torch.randn([1, 1, 320000])
-    fft = ConvSTFT(win_len, win_inc, fft_len, win_type=win_type, feature_type="real")
-    import librosa
+    inputs = torch.randn([1, 32000 * 10])
+    fft = ConvSTFT(win_len, win_inc, fft_len, win_type="hann", feature_type="real")
 
     outputs1 = fft(inputs)[0]
     outputs1 = outputs1.numpy()[0]
-    np_inputs = inputs.numpy().reshape([-1])
-    librosa_stft = librosa.stft(
-        np_inputs,
-        win_length=win_len,
-        n_fft=fft_len,
+    librosa_stft = torch.stft(
+        inputs,
+        n_fft=win_len,
         hop_length=win_inc,
-        window=win_type,
-        center=False,
+        win_length=win_len,
+        window=torch.hann_window(win_len),
+        center=True,
+        return_complex=True,
     )
-    print(np.mean((outputs1 - np.abs(librosa_stft)) ** 2))
-    ...
+    print(np.mean((outputs1 - np.abs(librosa_stft.numpy())) ** 2))
 
 
 def test_ifft1():
-    import soundfile as sf
+    import librosa
+    import soundfile
 
-    N = 100
-    inc = 75
-    fft_len = 512
-    torch.manual_seed(N)
-    #    inputs = torch.randn([1, 1, N*3000])
-    data = sf.read("../../wavs/ori.wav")[0]
+    N = 1024
+    inc = 256
+    fft_len = 1024
+    # torch.manual_seed(N)
+    # data = np.random.randn(32000 * 10)[None, None, :]
+    data, sr = librosa.load(r"F:\BaiduNetdiskDownload\BZNSYP\Wave\007537.wav", sr=None)
     inputs = data.reshape([1, 1, -1])
-    fft = ConvSTFT(N, inc, fft_len=fft_len, win_type="hanning", feature_type="complex")
-    ifft = ConviSTFT(
-        N, inc, fft_len=fft_len, win_type="hanning", feature_type="complex"
-    )
-
+    fft = ConvSTFT(N, inc, fft_len=fft_len, win_type="hann", feature_type="complex")
+    ifft = ConviSTFT(N, inc, fft_len=fft_len, win_type="hann", feature_type="complex")
     inputs = torch.from_numpy(inputs.astype(np.float32))
     outputs1 = fft(inputs)
+    print(outputs1.shape)
     outputs2 = ifft(outputs1)
-    sf.write("conv_stft.wav", outputs2.numpy()[0, 0, :], 16000)
-    print("wav MSE", torch.mean(torch.abs(inputs[..., : outputs2.size(2)] - outputs2)))
+    soundfile.write("conv_stft.wav", outputs2.numpy()[0, 0, :], sr)
+    print(
+        "wav MSE",
+        torch.mean(torch.abs(inputs[..., : outputs2.size(2)] - outputs2) ** 2),
+    )
 
 
 def test_ifft2():
@@ -169,15 +172,13 @@ def test_ifft2():
     fft_len = 512
     np.random.seed(20)
     torch.manual_seed(20)
-    t = np.random.randn(16000 * 4) * 0.005
+    t = np.random.randn(16000 * 4) * 0.001
     t = np.clip(t, -1, 1)
     # input = torch.randn([1,16000*4])
     input = torch.from_numpy(t[None, None, :].astype(np.float32))
 
-    fft = ConvSTFT(N, inc, fft_len=fft_len, win_type="hanning", feature_type="complex")
-    ifft = ConviSTFT(
-        N, inc, fft_len=fft_len, win_type="hanning", feature_type="complex"
-    )
+    fft = ConvSTFT(N, inc, fft_len=fft_len, win_type="hann", feature_type="complex")
+    ifft = ConviSTFT(N, inc, fft_len=fft_len, win_type="hann", feature_type="complex")
 
     out1 = fft(input)
     output = ifft(out1)

@@ -14,11 +14,17 @@ torch.set_grad_enabled(False)
 
 class Pytorch_DTLN_stateful_frame_wise(nn.Module):
     def __init__(
-            self, frameLength=1024, hopLength=256, hidden_size=128, encoder_size=256
+        self,
+        frameLength=1024,
+        hopLength=256,
+        hidden_size=128,
+        encoder_size=256,
+        compress=False,
     ):
         super(Pytorch_DTLN_stateful_frame_wise, self).__init__()
         self.frame_len = frameLength
         self.frame_hop = hopLength
+        self.compress = compress
 
         self.sep1 = SeperationBlock_Stateful(
             input_size=(frameLength // 2 + 1), hidden_size=hidden_size, dropout=0.25
@@ -57,7 +63,11 @@ class Pytorch_DTLN_stateful_frame_wise(nn.Module):
         :return:
         """
         # N, T, hidden_size
-        mask, out_state1 = self.sep1(mag, in_state1)
+        if self.compress:
+            mag_compressed = torch.sqrt(mag)
+            mask, out_state1 = self.sep1(mag_compressed, in_state1)
+        else:
+            mask, out_state1 = self.sep1(mag, in_state1)
         estimated_mag = mask * mag
 
         s1_stft = estimated_mag * torch.exp((1j * phase))
@@ -93,20 +103,6 @@ def infer(in_pt_path: str, in_wav_path: str, out_dir: str, add_window=False):
         out_dir, f"{Path(in_wav_path).stem};{Path(in_pt_path).stem};fw.wav"
     ).as_posix()
 
-    # net = DTLN_numpy(torch.load(in_pt_path, "cpu"))
-    # h_00, c_00, h_01, c_01 = [
-    #     np.zeros([1, 1, hidden_size]),
-    #     np.zeros([1, 1, hidden_size]),
-    #     np.zeros([1, 1, hidden_size]),
-    #     np.zeros([1, 1, hidden_size]),
-    # ]
-    # h_10, c_10, h_11, c_11 = [
-    #     np.zeros([1, 1, hidden_size]),
-    #     np.zeros([1, 1, hidden_size]),
-    #     np.zeros([1, 1, hidden_size]),
-    #     np.zeros([1, 1, hidden_size]),
-    # ]
-
     print(f"inference: {in_pt_path}, {in_wav_path}")
     net = get_dtln_network(in_pt_path, frame_len, frame_hop, hidden_size, encoder_size)
 
@@ -123,7 +119,9 @@ def infer(in_pt_path: str, in_wav_path: str, out_dir: str, add_window=False):
         fp.setsampwidth(2)
         fp.setnchannels(1)
         fp.setframerate(sr)
-        for idx, data in enumerate(tqdm(AudioUtils.data_generator(in_wav_path, frame_hop / sr, sr=sr)), 1):
+        for idx, data in enumerate(
+            tqdm(AudioUtils.data_generator(in_wav_path, frame_hop / sr, sr=sr)), 1
+        ):
             ana_data[:-frame_hop] = ana_data[frame_hop:]
             ana_data[-frame_hop:] = data
 
@@ -139,13 +137,6 @@ def infer(in_pt_path: str, in_wav_path: str, out_dir: str, add_window=False):
             )
             out = out.view(-1).numpy()
 
-            # out, out1_states1, out1_states2 = net(
-            #     mag, phase, (h_00, c_00, h_01, c_01), (h_10, c_10, h_11, c_11)
-            # )
-            # h_00, c_00, h_01, c_01 = np.split(out1_states1, 4)
-            # h_10, c_10, h_11, c_11 = np.split(out1_states2, 4)
-            # out = out.reshape(-1)
-
             output += out
             out = (output[:frame_hop] * 32768).astype(np.short)
             # if idx > 1:
@@ -157,7 +148,7 @@ def infer(in_pt_path: str, in_wav_path: str, out_dir: str, add_window=False):
 
 if __name__ == "__main__":
     infer(
-        in_pt_path=r"F:\Test\1.audio_test\2.in_models\drb\DTLN_0927_wSDR_drb_tam_0.08_rts_0.05_none_8ms_triple_32k_end_1.3_ep30.pth",
+        in_pt_path=r"F:\Test\1.audio_test\2.in_models\drb\DTLN_1010_wSDR_drb_tam_0.075_rts_0.05_none_8ms_triple_32k_end_1.3_ep28.pth",
         in_wav_path=r"F:\Test\1.audio_test\1.in_data\TB5W_V1.50_RK_DRB_OFF.wav",
         out_dir=r"F:\Test\1.audio_test\3.out_data\tmp",
         add_window=False,

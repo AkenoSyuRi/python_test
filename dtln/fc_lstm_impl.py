@@ -25,7 +25,9 @@ class CustomLSTM_Cell(nn.Module):
         assert 3 == xt.ndim == ht_1.ndim == ct_1.ndim
         inputs = torch.cat([xt, ht_1], -1)
 
-        in_gate, forget_gate, cell_gate, out_gate = torch.split(self.gate(inputs), self.hidden_size, -1)
+        in_gate, forget_gate, cell_gate, out_gate = torch.split(
+            self.gate(inputs), self.hidden_size, -1
+        )
 
         in_gate = torch.sigmoid(in_gate)
         forget_gate = torch.sigmoid(forget_gate)

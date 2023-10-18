@@ -1,15 +1,12 @@
 # -*- coding: utf-8 -*-
 import os
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import librosa
 import soundfile
 import torch
 import torch.nn as nn
-import torchaudio
 from audio_utils import AudioUtils
-from file_utils import FileUtils
 
 
 class Simple_STFT_Layer(nn.Module):
@@ -41,7 +38,7 @@ class Simple_STFT_Layer(nn.Module):
         )
         r = y.real
         i = y.imag
-        mag = torch.clamp(r ** 2 + i ** 2, self.eps) ** 0.5
+        mag = torch.clamp(r**2 + i**2, self.eps) ** 0.5
         phase = torch.atan2(i + self.eps, r + self.eps)
         return mag, phase
 
@@ -171,17 +168,20 @@ class SeperationBlock_Stateful(nn.Module):
 
 class Pytorch_DTLN_stateful(nn.Module):
     def __init__(
-            self,
-            frameLength=1024,
-            hopLength=256,
-            hidden_size=128,
-            encoder_size=256,
-            window="hanning",
-            device=None,
+        self,
+        frameLength=1024,
+        hopLength=256,
+        hidden_size=128,
+        encoder_size=256,
+        window="hanning",
+        device=None,
+        compress=False,
     ):
         super(Pytorch_DTLN_stateful, self).__init__()
         self.frame_len = frameLength
         self.frame_hop = hopLength
+        self.compress = compress
+
         self.stft = Simple_STFT_Layer(
             frameLength, hopLength, window=window, device=device
         )
@@ -231,7 +231,11 @@ class Pytorch_DTLN_stateful(nn.Module):
         phase = phase.permute(0, 2, 1)
 
         # N, T, hidden_size
-        mask, _ = self.sep1(mag, in_state1)
+        if self.compress:
+            mag_compressed = torch.sqrt(mag)
+            mask, _ = self.sep1(mag_compressed, in_state1)
+        else:
+            mask, _ = self.sep1(mag, in_state1)
         estimated_mag = mask * mag
 
         s1_stft = estimated_mag * torch.exp((1j * phase))
@@ -266,7 +270,7 @@ def pad_and_cut(data, fs, pad_duration_ms=16):
     return (padded_data * 32768).type(torch.int16)
 
 
-def process(model, in_wav_path, out_wav_path, hidden_size, sr, out_input=False):
+def process_file(model, in_wav_path, out_wav_path, hidden_size, sr, out_input=False):
     try:
         data, _ = librosa.load(in_wav_path, sr=sr)
         net_input = torch.FloatTensor(data).unsqueeze(0)
@@ -281,10 +285,45 @@ def process(model, in_wav_path, out_wav_path, hidden_size, sr, out_input=False):
             out_data = AudioUtils.merge_channels(data0, data1)
             soundfile.write(out_wav_path, out_data, sr)
         else:
-            torchaudio.save(out_wav_path, pad_and_cut(net_output, sr), sr)
+            data = net_output.squeeze().detach().numpy()
+            # torchaudio.save(out_wav_path, pad_and_cut(net_output, sr), sr)
+            soundfile.write(out_wav_path, data, sr)
         print(out_wav_path)
     except Exception as e:
         print(e)
+    ...
+
+
+def process(
+    model, in_pt_path, in_wav_path_or_list, out_dir, *, hidden_size, sr, out_input
+):
+    if isinstance(in_wav_path_or_list, (list, tuple)):
+        for in_wav_path in in_wav_path_or_list:
+            out_wav_basename = (
+                f"{Path(in_wav_path).stem};{Path(in_pt_path).stem};true.wav"
+            )
+            out_wav_path = os.path.join(out_dir, out_wav_basename)
+            process_file(
+                model,
+                in_wav_path,
+                out_wav_path,
+                hidden_size,
+                sr,
+                out_input=out_input,
+            )
+    else:
+        out_wav_basename = (
+            f"{Path(in_wav_path_or_list).stem};{Path(in_pt_path).stem};true.wav"
+        )
+        out_wav_path = os.path.join(out_dir, out_wav_basename)
+        process_file(
+            model,
+            in_wav_path_or_list,
+            out_wav_path,
+            hidden_size,
+            sr,
+            out_input=out_input,
+        )
     ...
 
 
@@ -310,63 +349,61 @@ def _print_networks(models: list):
 def main():
     # ============ config start ============ #
     frame_len, frame_hop, hidden_size, encoder_size, sr = 768, 256, 128, 512, 32000
-    add_window, out_input = "none", bool(0)
-    in_pt_path = r"F:\Test\1.audio_test\2.in_models\drb\DTLN_1008_wSDR_drb_tam_0.07_rts_0.05_none_8ms_triple_32k_end_1.1_ep120.pth"
-    in_wav_path_or_dir = r"F:\Test\1.audio_test\1.in_data\TB5W_V1.50_RK_DRB_OFF.wav"
+    add_window, out_input, compress = "none", bool(0), bool(1)
+    # in_pt_path_list = Path(r"F:\Test\1.audio_test\2.in_models\tmp").glob("*.pth")
+    in_pt_path_list = [
+        r"F:\Test\1.audio_test\2.in_models\drb\DTLN_1018_wSDR_drb_pre80ms_none_8ms_triple_32k_realrir_ep56.pth"
+    ]
+    in_wav_path_or_list = (
+        # r"F:\Test\1.audio_test\1.in_data\小会议室_女声_降噪去混响测试.wav",
+        # r"F:\Test\1.audio_test\1.in_data\中会议室_女声_降噪去混响测试.wav",
+        # r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启.wav",
+        # r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪关闭.wav",
+        # r"F:\Test\1.audio_test\1.in_data\large_meeting_room_after_rk_alg.wav",
+        # r"F:\Test\1.audio_test\1.in_data\大会议室_关空调排气扇.wav",
+        # r"F:\Test\1.audio_test\1.in_data\大会议室_开空调.wav",
+        # r"F:\Test\1.audio_test\1.in_data\大会议室_开空调排气扇.wav",
+        # r"F:\Test\1.audio_test\1.in_data\大会议室_开排气扇.wav",
+        r"F:\Test\1.audio_test\1.in_data\input.wav",
+    )
+    # in_wav_path_or_list = list(Path(r"D:\Temp\out_wav").glob("*_a_noisy.wav"))
+    # in_wav_path_or_list = r"D:\Temp\out1\anechoic_room_speech;large_meeting_room_rk_out_3_speed_1.0;tam=0.002;tar_rt60=0.15;ori_rt60=0.32;[speech]reverb.wav"
     out_dir = r"F:\Test\1.audio_test\3.out_data\drb"
+    # out_dir = r"D:\Temp\out1"
     # ============ config end ============ #
 
     torch.set_grad_enabled(False)
-    model = Pytorch_DTLN_stateful(
-        frameLength=frame_len,
-        hopLength=frame_hop,
-        hidden_size=hidden_size,
-        encoder_size=encoder_size,
-        window=add_window,
-    )
-    # print(model)
-    # exit(0)
-    model.load_state_dict(torch.load(in_pt_path, "cpu"))
-    model.eval()
-
-    if os.path.isdir(in_wav_path_or_dir):
-        files = FileUtils.glob_files(f"{in_wav_path_or_dir}/*.wav")
-        assert len(files) > 0
-        max_workers = len(files) if len(files) < os.cpu_count() else os.cpu_count()
-        with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            for in_wav_path in files:
-                out_wav_basename = (
-                    f"{Path(in_wav_path).stem};{Path(in_pt_path).stem};true.wav"
-                )
-                out_wav_path = os.path.join(out_dir, out_wav_basename)
-                ex.submit(
-                    process,
-                    model,
-                    in_wav_path,
-                    out_wav_path,
-                    hidden_size,
-                    sr,
-                    out_input=out_input,
-                )
-    else:
-        out_wav_basename = (
-            f"{Path(in_wav_path_or_dir).stem};{Path(in_pt_path).stem};true.wav"
+    Path(out_dir).mkdir(exist_ok=True)
+    for in_pt_path in in_pt_path_list:
+        model = Pytorch_DTLN_stateful(
+            frameLength=frame_len,
+            hopLength=frame_hop,
+            hidden_size=hidden_size,
+            encoder_size=encoder_size,
+            window=add_window,
+            compress=compress,
         )
-        out_wav_path = os.path.join(out_dir, out_wav_basename)
+        # print(model)
+        # exit(0)
+        model.load_state_dict(torch.load(in_pt_path, "cpu"))
+        model.eval()
+        print(in_pt_path)
+
         process(
             model,
-            in_wav_path_or_dir,
-            out_wav_path,
-            hidden_size,
-            sr,
+            in_pt_path,
+            in_wav_path_or_list,
+            out_dir,
+            hidden_size=hidden_size,
+            sr=sr,
             out_input=out_input,
         )
     ...
 
 
 if __name__ == "__main__":
-    main()
+    # main()
 
-    # net = Pytorch_DTLN_stateful(384, 128, 256, 256, "none")
-    # _print_networks([net])
+    net = Pytorch_DTLN_stateful(1024, 256, 128, 768, "none")
+    _print_networks([net])
     ...
