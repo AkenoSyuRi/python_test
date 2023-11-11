@@ -38,6 +38,7 @@ def sisdr_loss(preds, target, zero_mean: bool = False):
     val = (torch.sum(target_scaled**2, dim=-1) + eps) / (
         torch.sum(noise**2, dim=-1) + eps
     )
+    # return -torch.mean(val)
     return -10 * torch.mean(torch.log10(val))
 
 

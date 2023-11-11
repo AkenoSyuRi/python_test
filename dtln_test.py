@@ -3,36 +3,7 @@
 import torch
 import torch.nn as nn
 
-
-class Simple_STFT_Layer(nn.Module):
-    def __init__(self, frame_len=1024, frame_hop=256, window=None):
-        super(Simple_STFT_Layer, self).__init__()
-        self.eps = torch.finfo(torch.float32).eps
-        self.frame_len = frame_len
-        self.frame_hop = frame_hop
-        if window == "hanning":
-            self.window = torch.hann_window(frame_len, device="cuda")
-        else:
-            assert window == "none"
-            self.window = None
-
-    def forward(self, x):
-        if len(x.shape) != 2:
-            print("x must be in [B, T]")
-        y = torch.stft(
-            x,
-            n_fft=self.frame_len,
-            hop_length=self.frame_hop,
-            win_length=self.frame_len,
-            return_complex=True,
-            center=False,
-            window=self.window,
-        )
-        r = y.real
-        i = y.imag
-        mag = torch.clamp(r**2 + i**2, self.eps) ** 0.5
-        phase = torch.atan2(i + self.eps, r + self.eps)
-        return mag, phase
+from simple_stft import SimpleSTFT
 
 
 class Pytorch_InstantLayerNormalization(nn.Module):
@@ -130,7 +101,7 @@ class Pytorch_DTLN_stateful(nn.Module):
         hopLength=256,
         hidden_size=128,
         encoder_size=256,
-        window="hanning",
+        window="hann_window",
         compress=False,
     ):
         super(Pytorch_DTLN_stateful, self).__init__()
@@ -138,7 +109,7 @@ class Pytorch_DTLN_stateful(nn.Module):
         self.frame_hop = hopLength
         self.compress = compress
 
-        self.stft = Simple_STFT_Layer(frameLength, hopLength, window=window)
+        self.stft = SimpleSTFT(frameLength, hopLength, window=window)
 
         self.sep1 = SeperationBlock_Stateful(
             input_size=(frameLength // 2 + 1), hidden_size=hidden_size, dropout=0.25
@@ -180,7 +151,7 @@ class Pytorch_DTLN_stateful(nn.Module):
 
         batch, n_frames = x.shape
 
-        mag, phase = self.stft(x)
+        mag, phase = self.stft.transform(x)
         mag = mag.permute(0, 2, 1)
         phase = phase.permute(0, 2, 1)
 
@@ -193,6 +164,7 @@ class Pytorch_DTLN_stateful(nn.Module):
         estimated_mag = mask * mag
 
         s1_stft = estimated_mag * torch.exp((1j * phase))
+        out_stage1 = self.stft.inverse(s1_stft, transpose=True)
         y1 = torch.fft.irfft2(s1_stft, dim=-1)
         y1 = y1.permute(0, 2, 1)
 

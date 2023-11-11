@@ -1,6 +1,10 @@
 import librosa
 import numpy as np
 import soundfile
+import torch
+from scipy import signal
+
+from simple_stft import SimpleSTFT
 
 
 def enframe(data, win_len, win_inc):
@@ -42,28 +46,34 @@ def get_win_sum_of_1frame(window, win_len, win_inc):
 
 
 if __name__ == "__main__":
-    win_len, win_inc, win_type = 768, 256, "hann_window"
-    window = np.hamming(win_len + 1)[:-1]
-    # window1 = signal.get_window("hamming", win_len)
-
+    win_len, win_inc, win_type = 768, 256, "hamming"
+    window = signal.get_window(win_type, win_len)
     in_clean_path = r"F:\BaiduNetdiskDownload\BZNSYP\Wave\007537.wav"
 
-    data, sr = librosa.load(in_clean_path, sr=None)
-    # lib_stft_results = librosa.stft(
-    #     data,
-    #     n_fft=win_len,
-    #     hop_length=win_inc,
-    #     win_length=win_len,
-    #     window=window,
-    #     center=False,
-    # ).transpose()
+    stft = SimpleSTFT(win_len, win_inc, win_type)
 
+    # load data
+    data, sr = librosa.load(in_clean_path, sr=None)
     data = data.reshape(1, -1)
+
+    # stft1
     frames_data = enframe(data, win_len, win_inc).squeeze()
     in_data = frames_data * window
+    my_stft_results = np.fft.rfft(in_data).astype(np.complex64)
 
-    my_stft_results = np.fft.rfft(in_data)
+    # stft2
+    my_stft_results2 = stft.transform(
+        torch.FloatTensor(data), return_complex=True
+    ).numpy()
+    my_stft_results2 = my_stft_results2.squeeze().transpose()
+
+    # istft
     out_data = np.fft.irfft(my_stft_results)
     output = overlap_add(out_data, window, win_len, win_inc)
     soundfile.write("a.wav", output, sr)
+
+    # istft
+    out_data = np.fft.irfft(my_stft_results2)
+    output = overlap_add(out_data, window, win_len, win_inc)
+    soundfile.write("b.wav", output, sr)
     ...

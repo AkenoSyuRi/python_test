@@ -1,22 +1,44 @@
 import torch
+from scipy import signal
 
 
 class SimpleSTFT:
-    def __init__(self, frame_len=1024, frame_hop=256, window=None, device=None):
+    def __init__(self, frame_len=1024, frame_hop=256, window=None, device="cuda:0"):
         super(SimpleSTFT, self).__init__()
         self.eps = torch.finfo(torch.float32).eps
         self.frame_len = frame_len
         self.frame_hop = frame_hop
+        self.device = device
 
-        if window == "hann_window":
-            self.window = torch.hann_window(frame_len + 2, device=device)[1:-1]
-        elif window != "none":
-            self.window = getattr(torch, window)(frame_len, device=device)
-            assert self.window is not None, "invalid window name for torch"
+        if window != "none":
+            if window == "hann":
+                _window = signal.get_window(window, frame_len + 2)[1:-1]
+            elif window == "sin":
+                _window = signal.get_window("hann", frame_len + 2)[1:-1] ** 0.5
+            else:
+                _window = signal.get_window(window, frame_len)
+            self.window = torch.from_numpy(_window).float().to(device)
         else:
-            self.window = None
+            self.window = torch.ones(frame_len, device=device)
 
-    def transform(self, x):
+        self.win_sum = self.get_win_sum()
+        self.syn_win = self.window.view(1, -1, 1)
+
+    def get_win_sum(self):
+        window, win_len, win_inc = self.window, self.frame_len, self.frame_hop
+        assert win_len % win_inc == 0, "win_len cannot be equally divided by win_inc"
+
+        win_square = window**2
+        win_hop = win_len - win_inc
+        win_tmp = torch.zeros(win_len + win_hop, device=self.device)
+
+        loop_cnt = win_len // win_inc
+        for i in range(loop_cnt):
+            win_tmp[i * win_inc : i * win_inc + win_len] += win_square
+        win_sum = win_tmp[win_hop : win_hop + win_inc]
+        return win_sum[0]  # values in this array are all the same
+
+    def transform(self, x, return_complex=False):
         """
         in: [B,T']
         out: [B,F,T]
@@ -30,15 +52,19 @@ class SimpleSTFT:
             center=False,
             return_complex=True,
         )
+        if return_complex:
+            return y
         mag = torch.abs(y)
         phase = torch.angle(y)
         return mag, phase
 
-    def inverse(self, x):
+    def inverse(self, x, transpose=False):
         """
         in: [B,F,T]
         out: [B,T']
         """
+        if transpose:
+            x = torch.transpose(x, 1, 2)
         y = torch.istft(
             x,
             n_fft=self.frame_len,
@@ -55,11 +81,11 @@ if __name__ == "__main__":
     from icecream import ic
     import torchaudio
 
-    win_len, win_inc, window = 768, 256, "hann_window"
+    win_len, win_inc, window = 768, 256, "hamming"
 
     in_clean_path = r"F:\BaiduNetdiskDownload\BZNSYP\Wave\007537.wav"
     inputs, sr = torchaudio.load(in_clean_path)
-    stft = SimpleSTFT(win_len, win_inc, window=window)
+    stft = SimpleSTFT(win_len, win_inc, window=window, device="cpu")
     ic(inputs.shape)
     mag, phase = stft.transform(inputs)
     ic(mag.shape)

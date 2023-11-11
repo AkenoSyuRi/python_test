@@ -76,8 +76,8 @@ rir_data, _ = librosa.load(
 )
 
 if bool(1):
-    tam, tar_rt60, ori_rt60 = 0.002, 0.15, 0.32
-    prefix = f"{Path(in_clean_path).stem};{Path(in_rir_path).stem};tam={tam};tar_rt60={tar_rt60};ori_rt60={ori_rt60};"
+    tam, tar_rt60, ori_rt60 = 0.08, 0.15, 1.0
+    prefix = f"{Path(in_clean_path).stem};{Path(in_rir_path).stem};tam={tam};tar_rt60={tar_rt60};ori_rt60={ori_rt60};test;"
     rir, rts_rir = get_rts_rir(
         rir_data,
         ori_rt60,
