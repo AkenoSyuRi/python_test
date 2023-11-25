@@ -1,6 +1,6 @@
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 import torch.nn.functional as F
 from scipy.signal import get_window
 
@@ -39,7 +39,7 @@ class ConvSTFT(nn.Module):
     ):
         super(ConvSTFT, self).__init__()
 
-        if fft_len == None:
+        if fft_len is None:
             self.fft_len = np.int(2 ** np.ceil(np.log2(win_len)))
         else:
             self.fft_len = fft_len
@@ -80,7 +80,7 @@ class ConviSTFT(nn.Module):
         fix=True,
     ):
         super(ConviSTFT, self).__init__()
-        if fft_len == None:
+        if fft_len is None:
             self.fft_len = np.int(2 ** np.ceil(np.log2(win_len)))
         else:
             self.fft_len = fft_len

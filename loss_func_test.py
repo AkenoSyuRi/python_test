@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 import torchaudio
 from icecream import ic
+from torch.nn import functional as F
 
 
 def sisdr_loss(preds, target, zero_mean: bool = False):
@@ -42,6 +43,12 @@ def sisdr_loss(preds, target, zero_mean: bool = False):
     return -10 * torch.mean(torch.log10(val))
 
 
+def sisdri_loss(mixed, clean, clean_est):
+    loss1 = sisdr_loss(mixed, clean)
+    loss2 = sisdr_loss(clean_est, clean)
+    return loss2 - loss1
+
+
 def wSDRLoss(mixed, clean, clean_est, eps=1e-7):
     # Used on signal level(time-domain). Backprop-able istft should be used.
     # Batched audio inputs shape (N x T) required.
@@ -77,7 +84,8 @@ if __name__ == "__main__":
         target, _ = torchaudio.load(clean_path)
         predict, _ = torchaudio.load(predict_path)
 
+        loss1 = F.mse_loss(predict, target).item() * 500
         loss = sisdr_loss(predict, target).item()
         # loss = wSDRLoss(mixture, target, predict).item()
-        ic(round(loss, 5), idx)
+        ic(round(loss1, 5), round(loss, 5), idx)
     ...

@@ -14,13 +14,12 @@ def load_and_check(in_wav_path, sr):
 
 if __name__ == "__main__":
     sample_rate = 32000
-    out_wav_path = r"D:\Temp\input_audition_1107_1108_1109.wav"
+    out_wav_path = r"D:\Temp\input;audition;finetune;before_finetune.wav"
     in_wav_path_list = [
         r"F:\Test\1.audio_test\1.in_data\input.wav",
-        r"F:\Test\1.audio_test\3.out_data\drb\input;autidion.wav",
-        r"F:\Test\1.audio_test\3.out_data\drb\input;DTLN_1107_wSDR_drb_RealWedoRIR_newRTS_ep99;true.wav",
-        r"F:\Test\1.audio_test\3.out_data\drb\input;DTLN_1108_wSDR_drb_RealWedoRIR_newRTS0.32_Scale2Ref_ep81;true.wav",
-        r"F:\Test\1.audio_test\3.out_data\drb\input;DTLN_1109_wSDR_drb_winLen128_winInc32_ep90;true.wav",
+        r"D:\Temp\audition.wav",
+        r"F:\Test\1.audio_test\3.out_data\drb\input;DTLN_1127_wSDR_drb_triple_200u_Finetune_Decrease1dB_ep59;true.wav",
+        r"F:\Test\1.audio_test\3.out_data\tmp\input;model_0030;true.wav",
     ]
     FileUtils.ensure_dir(out_wav_path, is_file=True)
 

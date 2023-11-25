@@ -31,8 +31,8 @@ def split_to_segment(f, sr, duration, out_dir):
         data, __ = librosa.load(f, sr=None)
         assert __ == sr
         win_len = int(sr * duration)
-        win_sft = win_len
-        # win_sft = win_len // 4
+        # win_sft = win_len
+        win_sft = win_len // 10
         AudioUtils.save_to_segment(
             data, sr, win_len, win_sft, out_dir, FileUtils.name_ext(f)[0]
         )
@@ -40,8 +40,11 @@ def split_to_segment(f, sr, duration, out_dir):
         print(e)
 
 
-def step2_split_to_segment(in_dir, out_dir, sr, duration):
-    files = FileUtils.glob_files(rf"{in_dir}\**\*.wav")
+def step2_split_to_segment(in_file_or_dir, out_dir, sr, duration):
+    if os.path.isdir(in_file_or_dir):
+        files = FileUtils.glob_files(rf"{in_file_or_dir}\**\*.wav")
+    else:
+        files = [in_file_or_dir]
     FileUtils.ensure_dir(out_dir)
 
     with ThreadPoolExecutor(max_workers=use_cpu_count) as ex:
@@ -70,15 +73,17 @@ def rename_and_save(in_dir, out_dir):
 
 if __name__ == "__main__":
     use_cpu_count = os.cpu_count()
-    in_dir = r"F:\Downloads\synthetic\audio\eval\soundbank"
-    out_dir0 = r"D:\Temp\step0"
-    out_dir1 = r"D:\Temp\step1"
-    out_dir2 = r"D:\Temp\step2"
+    # in_dir = r"F:\Downloads\synthetic\audio\eval\soundbank"
+    # out_dir0 = r"D:\Temp\step0"
+    out_dir1 = r"F:\Test\3.dataset\0.original_backup\meeting_room_noise_ori"
+    out_dir2 = r"F:\Test\3.dataset\2.noise\1.train\meeting_room_noise_cut"
     sr = 32000
 
-    rename_and_save(in_dir, out_dir0)
+    # rename_and_save(in_dir, out_dir0)
+    #
+    # step1_split_to_mono(out_dir0, out_dir1, sr)  # resample to sr, and save multiple channels into multiple files
 
-    step1_split_to_mono(out_dir0, out_dir1, sr)  # resample to sr, and save multiple channels into multiple files
-
-    step2_split_to_segment(out_dir1, out_dir2, sr, 10)  # split every single file in to segments
+    step2_split_to_segment(
+        out_dir1, out_dir2, sr, 10
+    )  # split every single file in to segments
     ...

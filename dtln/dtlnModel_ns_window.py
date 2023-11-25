@@ -102,27 +102,27 @@ class SeperationBlock_Stateful(nn.Module):
 class Pytorch_DTLN_stateful(nn.Module):
     def __init__(
         self,
-        frameLength=1024,
-        hopLength=256,
+        win_length=1024,
+        hop_length=256,
         hidden_size=128,
+        dropout=0.25,
         encoder_size=256,
-        window="hamming",
-        compress=False,
+        window="none",
+        device=None,
     ):
         super(Pytorch_DTLN_stateful, self).__init__()
-        self.frame_len = frameLength
-        self.frame_hop = hopLength
-        self.compress = compress
+        self.frame_len = win_length
+        self.frame_hop = hop_length
 
-        self.stft = SimpleSTFT(frameLength, hopLength, window=window, device="cpu")
+        self.stft = SimpleSTFT(win_length, hop_length, window=window, device=device)
 
         self.sep1 = SeperationBlock_Stateful(
-            input_size=(frameLength // 2 + 1), hidden_size=hidden_size, dropout=0.25
+            input_size=(win_length // 2 + 1), hidden_size=hidden_size, dropout=dropout
         )
 
         self.encoder_size = encoder_size
         self.encoder_conv1 = nn.Conv1d(
-            in_channels=frameLength,
+            in_channels=win_length,
             out_channels=self.encoder_size,
             kernel_size=1,
             stride=1,
@@ -135,13 +135,12 @@ class Pytorch_DTLN_stateful(nn.Module):
         )
 
         self.sep2 = SeperationBlock_Stateful(
-            input_size=self.encoder_size, hidden_size=hidden_size, dropout=0.25
+            input_size=self.encoder_size, hidden_size=hidden_size, dropout=dropout
         )
 
-        # TODO with causal padding like in keras,when ksize > 1
         self.decoder_conv1 = nn.Conv1d(
             in_channels=self.encoder_size,
-            out_channels=frameLength,
+            out_channels=win_length,
             kernel_size=1,
             stride=1,
             bias=False,
@@ -161,38 +160,32 @@ class Pytorch_DTLN_stateful(nn.Module):
         phase = phase.permute(0, 2, 1)
 
         # N, T, hidden_size
-        if self.compress:
-            mag_compressed = torch.sqrt(mag)
-            mask, _ = self.sep1(mag_compressed, in_state1)
-        else:
-            mask, _ = self.sep1(mag, in_state1)
-        estimated_mag = mask * mag
+        mag_comp = torch.pow(mag, 0.3)
+        mask1, _ = self.sep1(mag_comp, in_state1)
+        estimated_mag = mask1 * mag
 
         s1_stft = estimated_mag * torch.exp(1j * phase)
-        out_stage1 = self.stft.inverse(s1_stft, transpose=True)
-
         y1 = torch.fft.irfft2(s1_stft, dim=-1)
         y1 = y1.permute(0, 2, 1)
 
         encoded_f = self.encoder_conv1(y1)
         encoded_f = encoded_f.permute(0, 2, 1)
         encoded_f_norm = self.encoder_norm1(encoded_f)
-        mask_2, _ = self.sep2(encoded_f_norm, in_state2)
-        encoded_f = mask_2 * encoded_f
+        mask2, _ = self.sep2(encoded_f_norm, in_state2)
+        encoded_f = mask2 * encoded_f
         estimated = encoded_f.permute(0, 2, 1)
         decoded_frame = self.decoder_conv1(estimated)
-
-        decoded_frame = decoded_frame * self.stft.syn_win
+        decoded_frame *= self.stft.window.view(1, -1, 1)
         # overlap and add
-        out_stage2 = torch.nn.functional.fold(
+        output = torch.nn.functional.fold(
             decoded_frame,
             (n_frames, 1),
             kernel_size=(self.frame_len, 1),
             padding=(0, 0),
             stride=(self.frame_hop, 1),
         )
-        out_stage2 = out_stage2.reshape(batch, -1) / self.stft.win_sum
-        return out_stage1, out_stage2
+        output = output.reshape(batch, -1) / self.stft.win_sum
+        return output
 
 
 def pad_and_cut(data, fs, pad_duration_ms=16):
@@ -213,15 +206,13 @@ def process_file(model, in_wav_path, out_wav_path, hidden_size, sr, out_input=Fa
 
         if out_input:
             data0 = net_input.squeeze().numpy()
-            data1 = net_output[-1].squeeze().detach().numpy()
+            data1 = net_output.squeeze().detach().numpy()
             out_data = AudioUtils.merge_channels(data0, data1)
             soundfile.write(out_wav_path, out_data, sr)
         else:
-            data0 = net_output[0].squeeze().detach().numpy()
-            data1 = net_output[1].squeeze().detach().numpy()
-            out_data = AudioUtils.merge_channels(data0, data1)
-            # data = net_output[-1].squeeze().detach().numpy()
-            soundfile.write(out_wav_path, out_data, sr)
+            data = net_output.squeeze().detach().numpy()
+            # torchaudio.save(out_wav_path, pad_and_cut(net_output, sr), sr)
+            soundfile.write(out_wav_path, data, sr)
         print(out_wav_path)
     except Exception as e:
         print(e)
@@ -282,41 +273,37 @@ def _print_networks(models: list):
 
 def main():
     # ============ config start ============ #
-    frame_len, frame_hop, hidden_size, encoder_size, sr = 768, 256, 128, 768, 32000
-    add_window, out_input, compress = "hamming", bool(0), bool(0)
+    frame_len, frame_hop, hidden_size, encoder_size, sr = 768, 256, 200, 768, 32000
+    add_window, out_input = "hamming", bool(0)
     # in_pt_path_list = Path(r"F:\Test\1.audio_test\2.in_models\tmp").glob("*.pth")
-    in_pt_path_list = [r"F:\Test\1.audio_test\2.in_models\tmp\model_0008.pth"]
+    in_pt_path_list = [
+        r"F:\Test\1.audio_test\2.in_models\tmp\model_0015.pth",
+    ]
     in_wav_path_or_list = (
-        # r"F:\Test\1.audio_test\1.in_data\小会议室_女声_降噪去混响测试.wav",
-        # r"F:\Test\1.audio_test\1.in_data\中会议室_女声_降噪去混响测试.wav",
-        # r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启.wav",
-        # r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪关闭.wav",
-        # r"F:\Test\1.audio_test\1.in_data\large_meeting_room_after_rk_alg.wav",
         # r"F:\Test\1.audio_test\1.in_data\大会议室_关空调排气扇.wav",
         # r"F:\Test\1.audio_test\1.in_data\大会议室_开空调.wav",
         # r"F:\Test\1.audio_test\1.in_data\大会议室_开空调排气扇.wav",
         # r"F:\Test\1.audio_test\1.in_data\大会议室_开排气扇.wav",
-        r"F:\Test\1.audio_test\1.in_data\input.wav",
+        # r"F:\Test\1.audio_test\1.in_data\input.wav",
+        # r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪关闭.wav",
+        r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启.wav",
+        # r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启_mic1.wav",
+        # r"F:\Test\1.audio_test\1.in_data\大会议室_关空调排气扇_mic1.wav",
     )
     # in_wav_path_or_list = list(Path(r"D:\Temp\out_wav").glob("*_a_noisy.wav"))
-    # in_wav_path_or_list = r"D:\Temp\out1\anechoic_room_speech;large_meeting_room_rk_out_3_speed_1.0;tam=0.002;tar_rt60=0.15;ori_rt60=0.32;[speech]reverb.wav"
     out_dir = r"F:\Test\1.audio_test\3.out_data\tmp"
-    # out_dir = r"D:\Temp\out1"
     # ============ config end ============ #
 
     torch.set_grad_enabled(False)
     Path(out_dir).mkdir(exist_ok=True)
     for in_pt_path in in_pt_path_list:
         model = Pytorch_DTLN_stateful(
-            frameLength=frame_len,
-            hopLength=frame_hop,
+            win_length=frame_len,
+            hop_length=frame_hop,
             hidden_size=hidden_size,
             encoder_size=encoder_size,
             window=add_window,
-            compress=compress,
         )
-        # print(model)
-        # exit(0)
         model.load_state_dict(torch.load(in_pt_path, "cpu"))
         model.eval()
         print(in_pt_path)
@@ -333,9 +320,15 @@ def main():
     ...
 
 
+def get_attr(obj, name: str, *, splitter="."):
+    for name in name.split(splitter):
+        obj = getattr(obj, name)
+    return obj
+
+
 if __name__ == "__main__":
     main()
 
-    # net = Pytorch_DTLN_stateful(1024, 256, 128, 768, "none")
+    # net = Pytorch_DTLN_stateful(768, 256, 200, 0.25, 768)
     # _print_networks([net])
     ...

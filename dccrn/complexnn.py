@@ -359,7 +359,9 @@ class ComplexBatchNorm(torch.nn.Module):
         if self.training and self.track_running_stats:
             self.num_batches_tracked += 1
             if self.momentum is None:  # use cumulative moving average
-                exponential_average_factor = 1.0 / self.num_batches_tracked.detach().item()
+                exponential_average_factor = (
+                    1.0 / self.num_batches_tracked.detach().item()
+                )
             else:  # use exponential moving average
                 exponential_average_factor = self.momentum
 

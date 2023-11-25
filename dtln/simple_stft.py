@@ -3,7 +3,7 @@ from scipy import signal
 
 
 class SimpleSTFT:
-    def __init__(self, frame_len=1024, frame_hop=256, window=None, device="cuda:0"):
+    def __init__(self, frame_len=1024, frame_hop=256, window=None, device=None):
         super(SimpleSTFT, self).__init__()
         self.eps = torch.finfo(torch.float32).eps
         self.frame_len = frame_len
@@ -22,7 +22,7 @@ class SimpleSTFT:
             self.window = torch.ones(frame_len, device=device)
 
         self.win_sum = self.get_win_sum()
-        self.syn_win = self.window.view(1, -1, 1)
+        ...
 
     def get_win_sum(self):
         window, win_len, win_inc = self.window, self.frame_len, self.frame_hop

@@ -23,10 +23,8 @@ def convert_between_pcm_and_wav(
 
 
 if __name__ == "__main__":
-    out_dir = r"F:\Test\1.audio_test\1.in_data"
-    in_audio_path = (
-        r"F:\Test\2.audio_recorded\1.tb5w\anechoic_room_speech\imic_cap_out_1_channel.pcm"
-    )
+    out_dir = r"F:\Projects\CLionProjects\DTLN_deploy\data\input"
+    in_audio_path = r"F:\Test\1.audio_test\1.in_data\input.wav"
     convert_between_pcm_and_wav(
         in_audio_path,
         out_dir,

@@ -4,7 +4,7 @@ import soundfile
 import torch
 from scipy import signal
 
-from simple_stft import SimpleSTFT
+from dtln.simple_stft import SimpleSTFT
 
 
 def enframe(data, win_len, win_inc):
