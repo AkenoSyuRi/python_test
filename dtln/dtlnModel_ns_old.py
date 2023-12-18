@@ -88,7 +88,7 @@ class SeperationBlock_Stateful(nn.Module):
         x1, (h1, c1) = self.rnn1(x, (h1_in, c1_in))
         x1 = self.drop(x1)
         x2, (h2, c2) = self.rnn2(x1, (h2_in, c2_in))
-        x2 = self.drop(x2)
+        # x2 = self.drop(x2)
 
         mask = self.dense(x2)
         mask = self.sigmoid(mask)
@@ -113,6 +113,7 @@ class Pytorch_DTLN_stateful(nn.Module):
         super(Pytorch_DTLN_stateful, self).__init__()
         self.frame_len = win_length
         self.frame_hop = hop_length
+        self.hidden_size = hidden_size
 
         self.stft = SimpleSTFT(win_length, hop_length, window=window, device=device)
 
@@ -152,31 +153,28 @@ class Pytorch_DTLN_stateful(nn.Module):
         in_state: [2, N, hidden_size, 2]
         :return:
         """
-
-        batch, n_frames = x.shape
-
         mag, phase = self.stft.transform(x)
         mag = mag.permute(0, 2, 1)
         phase = phase.permute(0, 2, 1)
 
         # N, T, hidden_size
-        mag_comp = torch.pow(mag, 0.3)
-        mask1, _ = self.sep1(mag_comp, in_state1)
+        mask1, _ = self.sep1(mag, in_state1)
         estimated_mag = mask1 * mag
 
-        s1_stft = estimated_mag * torch.exp(1j * phase)
-        y1 = torch.fft.irfft2(s1_stft, dim=-1)
-        y1 = y1.permute(0, 2, 1)
+        s1_stft = estimated_mag * torch.exp(1j * phase)  # N,T,F
+        y1 = torch.fft.irfft2(s1_stft, dim=-1)  # N,T,L
+        y1 = y1.permute(0, 2, 1)  # N,L,T
 
-        encoded_f = self.encoder_conv1(y1)
-        encoded_f = encoded_f.permute(0, 2, 1)
+        encoded_f = self.encoder_conv1(y1)  # B,Feat,T
+        encoded_f = encoded_f.permute(0, 2, 1)  # B,T,Feat
         encoded_f_norm = self.encoder_norm1(encoded_f)
         mask2, _ = self.sep2(encoded_f_norm, in_state2)
         encoded_f = mask2 * encoded_f
-        estimated = encoded_f.permute(0, 2, 1)
-        decoded_frame = self.decoder_conv1(estimated)
-        decoded_frame *= self.stft.window.view(1, -1, 1)
+        estimated = encoded_f.permute(0, 2, 1)  # B,Feat,T
+        decoded_frame = self.decoder_conv1(estimated)  # B,L,T
+        # decoded_frame *= self.stft.window.view(1, -1, 1)
         # overlap and add
+        batch, n_frames = x.shape
         output = torch.nn.functional.fold(
             decoded_frame,
             (n_frames, 1),
@@ -184,7 +182,8 @@ class Pytorch_DTLN_stateful(nn.Module):
             padding=(0, 0),
             stride=(self.frame_hop, 1),
         )
-        output = output.reshape(batch, -1) / self.stft.win_sum
+        output = output.reshape(batch, -1)
+        # output /= self.stft.win_sum
         return output
 
 
@@ -195,13 +194,13 @@ def pad_and_cut(data, fs, pad_duration_ms=16):
     return (padded_data * 32768).type(torch.int16)
 
 
-def process_file(model, in_wav_path, out_wav_path, hidden_size, sr, out_input=False):
+def process_file(model, in_wav_path, out_wav_path, sr, out_input=False):
     try:
         data, _ = librosa.load(in_wav_path, sr=sr)
         net_input = torch.FloatTensor(data).unsqueeze(0)
 
-        in_state1 = torch.zeros(2, 1, hidden_size, 2)
-        in_state2 = torch.zeros(2, 1, hidden_size, 2)
+        in_state1 = torch.zeros(2, 1, model.hidden_size, 2)
+        in_state2 = torch.zeros(2, 1, model.hidden_size, 2)
         net_output = model(net_input, in_state1, in_state2)
 
         if out_input:
@@ -219,9 +218,7 @@ def process_file(model, in_wav_path, out_wav_path, hidden_size, sr, out_input=Fa
     ...
 
 
-def process(
-    model, in_pt_path, in_wav_path_or_list, out_dir, *, hidden_size, sr, out_input
-):
+def process(model, in_pt_path, in_wav_path_or_list, out_dir, *, sr, out_input):
     if isinstance(in_wav_path_or_list, (list, tuple)):
         for in_wav_path in in_wav_path_or_list:
             out_wav_basename = (
@@ -232,7 +229,6 @@ def process(
                 model,
                 in_wav_path,
                 out_wav_path,
-                hidden_size,
                 sr,
                 out_input=out_input,
             )
@@ -245,7 +241,6 @@ def process(
             model,
             in_wav_path_or_list,
             out_wav_path,
-            hidden_size,
             sr,
             out_input=out_input,
         )
@@ -273,25 +268,29 @@ def _print_networks(models: list):
 
 def main():
     # ============ config start ============ #
-    frame_len, frame_hop, hidden_size, encoder_size, sr = 768, 256, 200, 768, 32000
-    add_window, out_input = "hamming", bool(0)
+    frame_len, frame_hop, hidden_size, encoder_size, sr, window = (
+        512,
+        128,
+        256,
+        256,
+        16000,
+        "none",
+    )
+    out_input = bool(1)
     # in_pt_path_list = Path(r"F:\Test\1.audio_test\2.in_models\tmp").glob("*.pth")
     in_pt_path_list = [
-        r"F:\Test\1.audio_test\2.in_models\tmp\model_0015.pth",
+        r"F:\Test\1.audio_test\2.in_models\tmp\DTLN_1209_snr_dnsdrb_quater_hs256_16k_ep62.pth",
     ]
     in_wav_path_or_list = (
-        # r"F:\Test\1.audio_test\1.in_data\大会议室_关空调排气扇.wav",
-        # r"F:\Test\1.audio_test\1.in_data\大会议室_开空调.wav",
-        # r"F:\Test\1.audio_test\1.in_data\大会议室_开空调排气扇.wav",
-        # r"F:\Test\1.audio_test\1.in_data\大会议室_开排气扇.wav",
         # r"F:\Test\1.audio_test\1.in_data\input.wav",
-        # r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪关闭.wav",
         r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启.wav",
-        # r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启_mic1.wav",
-        # r"F:\Test\1.audio_test\1.in_data\大会议室_关空调排气扇_mic1.wav",
+        r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启_mic1.wav",
+        # r"F:\Test\1.audio_test\1.in_data\小会议室_女声_降噪去混响测试.wav",
+        # r"F:\Test\1.audio_test\1.in_data\中会议室_女声_降噪去混响测试.wav",
     )
-    # in_wav_path_or_list = list(Path(r"D:\Temp\out_wav").glob("*_a_noisy.wav"))
     out_dir = r"F:\Test\1.audio_test\3.out_data\tmp"
+    # in_wav_path_or_list = list(Path(r"D:\Temp\out_wav").glob("*_a_noisy.wav"))
+    # out_dir = r"D:\Temp\out_wav"
     # ============ config end ============ #
 
     torch.set_grad_enabled(False)
@@ -302,7 +301,7 @@ def main():
             hop_length=frame_hop,
             hidden_size=hidden_size,
             encoder_size=encoder_size,
-            window=add_window,
+            window=window,
         )
         model.load_state_dict(torch.load(in_pt_path, "cpu"))
         model.eval()
@@ -313,7 +312,6 @@ def main():
             in_pt_path,
             in_wav_path_or_list,
             out_dir,
-            hidden_size=hidden_size,
             sr=sr,
             out_input=out_input,
         )

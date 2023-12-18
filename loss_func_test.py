@@ -1,9 +1,9 @@
+from functools import partial
 from pathlib import Path
 
 import torch
 import torchaudio
 from icecream import ic
-from torch.nn import functional as F
 
 
 def sisdr_loss(preds, target, zero_mean: bool = False):
@@ -43,10 +43,27 @@ def sisdr_loss(preds, target, zero_mean: bool = False):
     return -10 * torch.mean(torch.log10(val))
 
 
-def sisdri_loss(mixed, clean, clean_est):
-    loss1 = sisdr_loss(mixed, clean)
-    loss2 = sisdr_loss(clean_est, clean)
-    return loss2 - loss1
+def lsd_loss(y_est_t: torch.Tensor, y_true_t: torch.Tensor, n_fft=1024, eps=1e-7):
+    """
+    y_est_t: [B,T]
+    y_true_t: [B,T]
+    """
+    stft = partial(
+        torch.stft,
+        n_fft=n_fft,
+        hop_length=n_fft // 4,
+        win_length=n_fft,
+        window=torch.hann_window(n_fft, device=y_est_t.device),
+        center=False,
+        return_complex=True,
+    )
+    yt_spec = stft(y_true_t)  # [B,F,T']
+    ye_spec = stft(y_est_t)  # [B,F,T']
+
+    yt_spec = torch.log10(torch.abs(yt_spec) ** 2 + eps)
+    ye_spec = torch.log10(torch.abs(ye_spec) ** 2 + eps)
+    loss = torch.mean(torch.sqrt(torch.mean((yt_spec - ye_spec) ** 2, dim=1)))
+    return loss
 
 
 def wSDRLoss(mixed, clean, clean_est, eps=1e-7):
@@ -73,19 +90,22 @@ def wSDRLoss(mixed, clean, clean_est, eps=1e-7):
 
 
 if __name__ == "__main__":
-    in_wav_dir = Path(r"D:\Temp\out_sisdr_dataset_wav_test")
+    in_wav_dir = Path(r"D:\Temp\out_wav")
 
-    for idx in range(100):
+    file_indices = (0, 100)
+    for idx in range(*file_indices):
         mixture_path = in_wav_dir.joinpath(f"{idx}_a_noisy.wav")
         clean_path = in_wav_dir.joinpath(f"{idx}_b_clean.wav")
-        predict_path = in_wav_dir.joinpath(f"{idx}_a_noisy;model_0011;true.wav")
+        predict_path = in_wav_dir.joinpath(
+            f"{idx}_a_noisy;DTLN_1130_snr_dnsdrb_triple_NewNoise_ep100;true.wav"
+        )
 
         mixture, _ = torchaudio.load(mixture_path)
         target, _ = torchaudio.load(clean_path)
         predict, _ = torchaudio.load(predict_path)
 
-        loss1 = F.mse_loss(predict, target).item() * 500
-        loss = sisdr_loss(predict, target).item()
+        # loss = sisdr_loss(predict, target).item()
         # loss = wSDRLoss(mixture, target, predict).item()
-        ic(round(loss1, 5), round(loss, 5), idx)
+        loss = lsd_loss(predict, target)
+        ic(round(loss.item(), 5), idx)
     ...

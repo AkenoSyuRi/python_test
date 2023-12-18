@@ -12,9 +12,9 @@ class SimpleSTFT:
 
         if window != "none":
             if window == "hann":
-                _window = signal.get_window(window, frame_len + 2)[1:-1]
+                _window = signal.get_window(window, frame_len)
             elif window == "sin":
-                _window = signal.get_window("hann", frame_len + 2)[1:-1] ** 0.5
+                _window = signal.get_window("hann", frame_len) ** 0.5
             else:
                 _window = signal.get_window(window, frame_len)
             self.window = torch.from_numpy(_window).float().to(device)

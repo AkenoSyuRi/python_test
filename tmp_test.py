@@ -1,19 +1,22 @@
-import random
 from pathlib import Path
 
 import librosa
 import soundfile
+from matplotlib import pyplot as plt
 
 if __name__ == "__main__":
-    clean_path = Path(r"F:\BaiduNetdiskDownload\BZNSYP\Wave\001760.wav")
-    clean_data, sr = librosa.load(clean_path, sr=32000)
-    offset_ranges = list(range(1, 32 + 1))
-    channels = 4
+    audio_file_path = Path(r"F:\BaiduNetdiskDownload\BZNSYP\Wave\002944.wav")
+    y, sr = librosa.load(audio_file_path, sr=32000)
 
-    offset = random.choice(offset_ranges)
-    for i in range(1, channels):
-        idx = i * offset
-        clean_data[idx:] += clean_data[:-idx]
-    out_path = Path(f"out_{offset=}.wav")
-    soundfile.write(out_path, clean_data, sr)
+    plt.figure(figsize=(15, 7))
+
+    mfcc_features = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+
+    # librosa.display.specshow(mfcc_features, x_axis="time")
+    # plt.colorbar()
+    # plt.title("MFCC Feature")
+    # plt.show()
+
+    y_reconstructed = librosa.feature.inverse.mfcc_to_audio(mfcc_features)
+    soundfile.write("a.wav", y_reconstructed, sr)
     ...

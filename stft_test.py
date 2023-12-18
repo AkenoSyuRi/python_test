@@ -46,8 +46,8 @@ def get_win_sum_of_1frame(window, win_len, win_inc):
 
 
 if __name__ == "__main__":
-    win_len, win_inc, win_type = 768, 256, "hamming"
-    window = signal.get_window(win_type, win_len)
+    win_len, win_inc, win_type = 1024, 512, "hann"
+    window = signal.get_window(win_type, win_len) ** 0.5
     in_clean_path = r"F:\BaiduNetdiskDownload\BZNSYP\Wave\007537.wav"
 
     stft = SimpleSTFT(win_len, win_inc, win_type)
@@ -62,10 +62,10 @@ if __name__ == "__main__":
     my_stft_results = np.fft.rfft(in_data).astype(np.complex64)
 
     # stft2
-    my_stft_results2 = stft.transform(
-        torch.FloatTensor(data), return_complex=True
-    ).numpy()
-    my_stft_results2 = my_stft_results2.squeeze().transpose()
+    # my_stft_results2 = stft.transform(
+    #     torch.FloatTensor(data), return_complex=True
+    # ).numpy()
+    # my_stft_results2 = my_stft_results2.squeeze().transpose()
 
     # istft
     out_data = np.fft.irfft(my_stft_results)
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     soundfile.write("a.wav", output, sr)
 
     # istft
-    out_data = np.fft.irfft(my_stft_results2)
-    output = overlap_add(out_data, window, win_len, win_inc)
-    soundfile.write("b.wav", output, sr)
+    # out_data = np.fft.irfft(my_stft_results2)
+    # output = overlap_add(out_data, window, win_len, win_inc)
+    # soundfile.write("b.wav", output, sr)
     ...

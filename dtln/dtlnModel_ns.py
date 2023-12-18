@@ -8,10 +8,10 @@ import torch
 import torch.nn as nn
 from audio_utils import AudioUtils
 
-from dtln.simple_stft import SimpleSTFT
+from simple_stft import SimpleSTFT
 
 
-class Pytorch_InstantLayerNormalization(nn.Module):
+class InstantLayerNorm(nn.Module):
     """
     Class implementing instant layer normalization. It can also be called
     channel-wise layer normalization and was proposed by
@@ -22,7 +22,7 @@ class Pytorch_InstantLayerNormalization(nn.Module):
         """
         Constructor
         """
-        super(Pytorch_InstantLayerNormalization, self).__init__()
+        super(InstantLayerNorm, self).__init__()
         self.epsilon = 1e-7
         self.gamma = nn.Parameter(torch.ones(1, 1, channels), requires_grad=True)
         self.beta = nn.Parameter(torch.zeros(1, 1, channels), requires_grad=True)
@@ -46,77 +46,60 @@ class Pytorch_InstantLayerNormalization(nn.Module):
         return outputs
 
 
-class SeperationBlock_Stateful(nn.Module):
-    def __init__(self, input_size=513, hidden_size=128, dropout=0.25):
-        super(SeperationBlock_Stateful, self).__init__()
-        self.rnn1 = nn.LSTM(
+class SeparationBlock(nn.Module):
+    def __init__(self, input_size=513, hidden_size=128, hidden_layers=2, dropout=0.25):
+        super(SeparationBlock, self).__init__()
+        self.rnn = nn.LSTM(
             input_size=input_size,
             hidden_size=hidden_size,
-            num_layers=1,
+            num_layers=hidden_layers,
             batch_first=True,
-            dropout=0.0,
+            dropout=dropout,
             bidirectional=False,
         )
-        self.rnn2 = nn.LSTM(
-            input_size=hidden_size,
-            hidden_size=hidden_size,
-            num_layers=1,
-            batch_first=True,
-            dropout=0.0,
-            bidirectional=False,
-        )
-        self.drop = nn.Dropout(dropout)
 
         self.dense = nn.Linear(hidden_size, input_size)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x, in_states):
+    def forward(self, x):
         """
-
         :param x:  [N, T, input_size]
-        :param in_states: [2, N, hidden_size, 2]
         :return:
         """
-        h1_in, c1_in = in_states[:1, :, :, 0], in_states[:1, :, :, 1]
-        h2_in, c2_in = in_states[1:, :, :, 0], in_states[1:, :, :, 1]
+        x1, _ = self.rnn(x)
 
-        h1_in = h1_in.contiguous()
-        c1_in = c1_in.contiguous()
-        h2_in = h2_in.contiguous()
-        c2_in = c2_in.contiguous()
-
-        x1, (h1, c1) = self.rnn1(x, (h1_in, c1_in))
-        x1 = self.drop(x1)
-        x2, (h2, c2) = self.rnn2(x1, (h2_in, c2_in))
-        # x2 = self.drop(x2)
-
-        mask = self.dense(x2)
+        mask = self.dense(x1)
         mask = self.sigmoid(mask)
 
-        h = torch.cat((h1, h2), dim=0)
-        c = torch.cat((c1, c2), dim=0)
-        out_states = torch.stack((h, c), dim=-1)
-        return mask, out_states
+        return mask
 
 
-class Pytorch_DTLN_stateful(nn.Module):
+class DTLN_Network(nn.Module):
     def __init__(
         self,
         win_length=1024,
         hop_length=256,
-        hidden_size=128,
-        dropout=0.25,
+        rnn_hidden_sizes=(128, 128),
+        rnn_num_layers=(2, 2),
+        rnn_dropouts=(0.25, 0.25),
         encoder_size=256,
+        window="none",
         device=None,
     ):
-        super(Pytorch_DTLN_stateful, self).__init__()
+        super(DTLN_Network, self).__init__()
+        assert 2 == len(rnn_hidden_sizes) == len(rnn_num_layers) == len(rnn_dropouts)
         self.frame_len = win_length
         self.frame_hop = hop_length
+        self.rnn_hidden_sizes = rnn_hidden_sizes
+        self.rnn_num_layers = rnn_num_layers
 
-        self.stft = SimpleSTFT(win_length, hop_length, window="none", device=device)
+        self.stft = SimpleSTFT(win_length, hop_length, window=window, device=device)
 
-        self.sep1 = SeperationBlock_Stateful(
-            input_size=(win_length // 2 + 1), hidden_size=hidden_size, dropout=dropout
+        self.sep1 = SeparationBlock(
+            input_size=(win_length // 2 + 1),
+            hidden_size=rnn_hidden_sizes[0],
+            hidden_layers=rnn_num_layers[0],
+            dropout=rnn_dropouts[0],
         )
 
         self.encoder_size = encoder_size
@@ -129,12 +112,13 @@ class Pytorch_DTLN_stateful(nn.Module):
         )
 
         # self.encoder_norm1 = nn.InstanceNorm1d(num_features=self.encoder_size, eps=1e-7, affine=True)
-        self.encoder_norm1 = Pytorch_InstantLayerNormalization(
-            channels=self.encoder_size
-        )
+        self.encoder_norm1 = InstantLayerNorm(channels=self.encoder_size)
 
-        self.sep2 = SeperationBlock_Stateful(
-            input_size=self.encoder_size, hidden_size=hidden_size, dropout=dropout
+        self.sep2 = SeparationBlock(
+            input_size=self.encoder_size,
+            hidden_size=rnn_hidden_sizes[1],
+            hidden_layers=rnn_num_layers[1],
+            dropout=rnn_dropouts[1],
         )
 
         self.decoder_conv1 = nn.Conv1d(
@@ -145,35 +129,33 @@ class Pytorch_DTLN_stateful(nn.Module):
             bias=False,
         )
 
-    def forward(self, x, in_state1, in_state2):
+    def forward(self, x):
         """
         :param x:  [N, T]
-        in_state: [2, N, hidden_size, 2]
         :return:
         """
-
-        batch, n_frames = x.shape
-
         mag, phase = self.stft.transform(x)
         mag = mag.permute(0, 2, 1)
         phase = phase.permute(0, 2, 1)
 
         # N, T, hidden_size
-        mask1, _ = self.sep1(mag, in_state1)
+        mask1 = self.sep1(mag)
         estimated_mag = mask1 * mag
 
-        s1_stft = estimated_mag * torch.exp(1j * phase)
-        y1 = torch.fft.irfft2(s1_stft, dim=-1)
-        y1 = y1.permute(0, 2, 1)
+        s1_stft = estimated_mag * torch.exp(1j * phase)  # N,T,F
+        y1 = torch.fft.irfft2(s1_stft, dim=-1)  # N,T,L
+        y1 = y1.permute(0, 2, 1)  # N,L,T
 
-        encoded_f = self.encoder_conv1(y1)
-        encoded_f = encoded_f.permute(0, 2, 1)
+        encoded_f = self.encoder_conv1(y1)  # B,Feat,T
+        encoded_f = encoded_f.permute(0, 2, 1)  # B,T,Feat
         encoded_f_norm = self.encoder_norm1(encoded_f)
-        mask2, _ = self.sep2(encoded_f_norm, in_state2)
+        mask2 = self.sep2(encoded_f_norm)
         encoded_f = mask2 * encoded_f
-        estimated = encoded_f.permute(0, 2, 1)
-        decoded_frame = self.decoder_conv1(estimated)
+        estimated = encoded_f.permute(0, 2, 1)  # B,Feat,T
+        decoded_frame = self.decoder_conv1(estimated)  # B,L,T
+        decoded_frame *= self.stft.window.view(1, -1, 1)
         # overlap and add
+        batch, n_frames = x.shape
         output = torch.nn.functional.fold(
             decoded_frame,
             (n_frames, 1),
@@ -182,6 +164,7 @@ class Pytorch_DTLN_stateful(nn.Module):
             stride=(self.frame_hop, 1),
         )
         output = output.reshape(batch, -1)
+        # output /= self.stft.win_sum
         return output
 
 
@@ -192,14 +175,12 @@ def pad_and_cut(data, fs, pad_duration_ms=16):
     return (padded_data * 32768).type(torch.int16)
 
 
-def process_file(model, in_wav_path, out_wav_path, hidden_size, sr, out_input=False):
+def process_file(model, in_wav_path, out_wav_path, sr, out_input=False):
     try:
         data, _ = librosa.load(in_wav_path, sr=sr)
         net_input = torch.FloatTensor(data).unsqueeze(0)
 
-        in_state1 = torch.zeros(2, 1, hidden_size, 2)
-        in_state2 = torch.zeros(2, 1, hidden_size, 2)
-        net_output = model(net_input, in_state1, in_state2)
+        net_output = model(net_input)
 
         if out_input:
             data0 = net_input.squeeze().numpy()
@@ -216,9 +197,7 @@ def process_file(model, in_wav_path, out_wav_path, hidden_size, sr, out_input=Fa
     ...
 
 
-def process(
-    model, in_pt_path, in_wav_path_or_list, out_dir, *, hidden_size, sr, out_input
-):
+def process(model, in_pt_path, in_wav_path_or_list, out_dir, *, sr, out_input):
     if isinstance(in_wav_path_or_list, (list, tuple)):
         for in_wav_path in in_wav_path_or_list:
             out_wav_basename = (
@@ -229,7 +208,6 @@ def process(
                 model,
                 in_wav_path,
                 out_wav_path,
-                hidden_size,
                 sr,
                 out_input=out_input,
             )
@@ -242,7 +220,6 @@ def process(
             model,
             in_wav_path_or_list,
             out_wav_path,
-            hidden_size,
             sr,
             out_input=out_input,
         )
@@ -270,31 +247,42 @@ def _print_networks(models: list):
 
 def main():
     # ============ config start ============ #
-    frame_len, frame_hop, hidden_size, encoder_size, sr = 768, 256, 200, 768, 32000
-    out_input = bool(0)
+    (
+        frame_len,
+        frame_hop,
+        rnn_hidden_sizes,
+        rnn_num_layers,
+        encoder_size,
+        window,
+        sr,
+        out_input,
+    ) = (512, 128, (128, 128), (3, 3), 256, "none", 16000, bool(0))
     # in_pt_path_list = Path(r"F:\Test\1.audio_test\2.in_models\tmp").glob("*.pth")
     in_pt_path_list = [
-        r"F:\Test\1.audio_test\2.in_models\tmp\model_0049.pth",
+        r"F:\Test\1.audio_test\2.in_models\dnsdrb\DTLN_1211_snr_dnsdrb_quater_Rnn3L_16k_ep88.pth",
     ]
     in_wav_path_or_list = (
         # r"F:\Test\1.audio_test\1.in_data\input.wav",
         r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启.wav",
-        # r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启_mic1.wav",
+        r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启_mic1.wav",
         # r"F:\Test\1.audio_test\1.in_data\小会议室_女声_降噪去混响测试.wav",
         # r"F:\Test\1.audio_test\1.in_data\中会议室_女声_降噪去混响测试.wav",
     )
-    # in_wav_path_or_list = list(Path(r"D:\Temp\out_wav").glob("*_a_noisy.wav"))
     out_dir = r"F:\Test\1.audio_test\3.out_data\tmp"
+    # in_wav_path_or_list = list(Path(r"D:\Temp\out_wav").glob("*_a_noisy.wav"))
+    # out_dir = r"D:\Temp\out_wav"
     # ============ config end ============ #
 
     torch.set_grad_enabled(False)
     Path(out_dir).mkdir(exist_ok=True)
     for in_pt_path in in_pt_path_list:
-        model = Pytorch_DTLN_stateful(
+        model = DTLN_Network(
             win_length=frame_len,
             hop_length=frame_hop,
-            hidden_size=hidden_size,
+            rnn_hidden_sizes=rnn_hidden_sizes,
+            rnn_num_layers=rnn_num_layers,
             encoder_size=encoder_size,
+            window=window,
         )
         model.load_state_dict(torch.load(in_pt_path, "cpu"))
         model.eval()
@@ -305,17 +293,10 @@ def main():
             in_pt_path,
             in_wav_path_or_list,
             out_dir,
-            hidden_size=hidden_size,
             sr=sr,
             out_input=out_input,
         )
     ...
-
-
-def get_attr(obj, name: str, *, splitter="."):
-    for name in name.split(splitter):
-        obj = getattr(obj, name)
-    return obj
 
 
 if __name__ == "__main__":
