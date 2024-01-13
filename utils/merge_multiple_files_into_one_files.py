@@ -14,10 +14,19 @@ def load_and_check(in_wav_path, sr):
 
 if __name__ == "__main__":
     sample_rate = 32000
-    out_wav_path = r"D:\Temp\input;finetune_讲话时制造噪声.wav"
+    out_wav_path = r"D:\Temp\11_mic_straight_line.wav"
     in_wav_path_list = [
-        r"F:\Test\2.audio_recorded\1.tb5w\imic_data_cap_for_denoising_and_dereverberation_test\imic_cap_out_1_channel.wav",
-        r"F:\Test\2.audio_recorded\1.tb5w\imic_data_cap_for_denoising_and_dereverberation_test\imic_cap_out_1_channel;DTLN_1208_snr_dnsdrb_half_hs128_es1024_finetune_ep70;true.wav",
+        r"D:\Temp\cma100_out\pick_0_offset_1_chn41.wav",
+        r"D:\Temp\cma100_out\pick_1_offset_1_chn42.wav",
+        r"D:\Temp\cma100_out\pick_2_offset_1_chn35.wav",
+        r"D:\Temp\cma100_out\pick_3_offset_1_chn36.wav",
+        r"D:\Temp\cma100_out\pick_4_offset_1_chn30.wav",
+        r"D:\Temp\cma100_out\pick_5_offset_1_chn39.wav",
+        r"D:\Temp\cma100_out\pick_6_offset_1_chn8.wav",
+        r"D:\Temp\cma100_out\pick_7_offset_1_chn12.wav",
+        r"D:\Temp\cma100_out\pick_8_offset_1_chn11.wav",
+        r"D:\Temp\cma100_out\pick_9_offset_1_chn54.wav",
+        r"D:\Temp\cma100_out\pick_10_offset_1_chn53.wav",
     ]
     FileUtils.ensure_dir(out_wav_path, is_file=True)
 

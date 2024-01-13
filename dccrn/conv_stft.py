@@ -46,7 +46,7 @@ class ConvSTFT(nn.Module):
 
         kernel, _ = init_kernels(win_len, win_inc, self.fft_len, win_type)
         # self.weight = nn.Parameter(kernel, requires_grad=(not fix))
-        self.register_buffer("weight", kernel)
+        self.register_buffer("weight", kernel, persistent=False)
         self.feature_type = feature_type
         self.stride = win_inc
         self.win_len = win_len
@@ -88,15 +88,17 @@ class ConviSTFT(nn.Module):
             win_len, win_inc, self.fft_len, win_type, invers=True
         )
         # self.weight = nn.Parameter(kernel, requires_grad=(not fix))
-        self.register_buffer("weight", kernel)
+        self.register_buffer("weight", kernel, persistent=False)
         self.feature_type = feature_type
         self.win_type = win_type
         self.win_len = win_len
         self.stride = win_inc
         self.stride = win_inc
         self.dim = self.fft_len
-        self.register_buffer("window", window)
-        self.register_buffer("enframe", torch.eye(win_len)[:, None, :])
+        self.register_buffer("window", window, persistent=False)
+        self.register_buffer(
+            "enframe", torch.eye(win_len)[:, None, :], persistent=False
+        )
 
     def forward(self, inputs, phase=None):
         """
@@ -122,6 +124,7 @@ class ConviSTFT(nn.Module):
         return outputs
 
 
+"""
 def test_fft():
     torch.manual_seed(20)
     win_len = 320
@@ -187,9 +190,27 @@ def test_ifft2():
     import soundfile as sf
 
     sf.write("zero.wav", output[0, 0].numpy(), 16000)
-
+"""
 
 if __name__ == "__main__":
-    # test_fft()
-    test_ifft1()
-    # test_ifft2()
+    torch.set_grad_enabled(False)
+    torch.manual_seed(123)
+    win_len, win_inc, window = 512, 256, "hamming"
+
+    kernel, _ = init_kernels(win_len, win_inc, win_len, None, invers=True)
+
+    audio_stft1 = torch.rand(1, 514, 1)
+    res1 = F.conv_transpose1d(audio_stft1, kernel, stride=win_len)
+
+    audio_stft2 = torch.complex(audio_stft1[:, :257], audio_stft1[:, 257:]).permute(
+        0, 2, 1
+    )
+    res2 = torch.fft.irfft(audio_stft2, dim=-1).reshape(audio_stft1.shape[0], 1, -1)
+    assert torch.allclose(res1, res2, atol=1e-6)
+
+    net = nn.ConvTranspose1d(514, 1, 512, stride=512, bias=False)
+    net.weight.data.copy_(kernel)
+
+    res3 = net(audio_stft1)
+    assert torch.allclose(res1, res3, atol=1e-8)
+    ...

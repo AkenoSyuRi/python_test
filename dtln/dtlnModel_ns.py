@@ -47,14 +47,20 @@ class InstantLayerNorm(nn.Module):
 
 
 class SeparationBlock(nn.Module):
-    def __init__(self, input_size=513, hidden_size=128, hidden_layers=2, dropout=0.25):
+    def __init__(
+        self,
+        input_size=513,
+        hidden_size=128,
+        hidden_layers=2,
+        dropout=0.25,
+    ):
         super(SeparationBlock, self).__init__()
         self.rnn = nn.LSTM(
             input_size=input_size,
             hidden_size=hidden_size,
             num_layers=hidden_layers,
             batch_first=True,
-            dropout=dropout,
+            dropout=dropout if hidden_layers > 1 else 0,
             bidirectional=False,
         )
 
@@ -84,7 +90,6 @@ class DTLN_Network(nn.Module):
         rnn_dropouts=(0.25, 0.25),
         encoder_size=256,
         window="none",
-        device=None,
     ):
         super(DTLN_Network, self).__init__()
         assert 2 == len(rnn_hidden_sizes) == len(rnn_num_layers) == len(rnn_dropouts)
@@ -92,11 +97,12 @@ class DTLN_Network(nn.Module):
         self.frame_hop = hop_length
         self.rnn_hidden_sizes = rnn_hidden_sizes
         self.rnn_num_layers = rnn_num_layers
+        self.fft_bins = win_length // 2 + 1
 
-        self.stft = SimpleSTFT(win_length, hop_length, window=window, device=device)
+        self.stft = SimpleSTFT(win_length, hop_length, window=window)
 
         self.sep1 = SeparationBlock(
-            input_size=(win_length // 2 + 1),
+            input_size=self.fft_bins,
             hidden_size=rnn_hidden_sizes[0],
             hidden_layers=rnn_num_layers[0],
             dropout=rnn_dropouts[0],
@@ -153,7 +159,7 @@ class DTLN_Network(nn.Module):
         encoded_f = mask2 * encoded_f
         estimated = encoded_f.permute(0, 2, 1)  # B,Feat,T
         decoded_frame = self.decoder_conv1(estimated)  # B,L,T
-        decoded_frame *= self.stft.window.view(1, -1, 1)
+        # decoded_frame *= self.stft.window.view(1, -1, 1)
         # overlap and add
         batch, n_frames = x.shape
         output = torch.nn.functional.fold(
@@ -259,18 +265,19 @@ def main():
     ) = (512, 128, (128, 128), (3, 3), 256, "none", 16000, bool(0))
     # in_pt_path_list = Path(r"F:\Test\1.audio_test\2.in_models\tmp").glob("*.pth")
     in_pt_path_list = [
-        r"F:\Test\1.audio_test\2.in_models\dnsdrb\DTLN_1211_snr_dnsdrb_quater_Rnn3L_16k_ep88.pth",
+        r"F:\Test\1.audio_test\2.in_models\dnsdrb\DTLN_0108_wMSE_dnsdrb_quater_rts0.4_pre1ms_finetune_NoFactor_ep100.pth",
     ]
     in_wav_path_or_list = (
-        # r"F:\Test\1.audio_test\1.in_data\input.wav",
-        r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启.wav",
-        r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启_mic1.wav",
+        r"F:\Test\1.audio_test\1.in_data\input.wav",
+        # r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启.wav",
+        # r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启_mic1.wav",
         # r"F:\Test\1.audio_test\1.in_data\小会议室_女声_降噪去混响测试.wav",
         # r"F:\Test\1.audio_test\1.in_data\中会议室_女声_降噪去混响测试.wav",
+        # r"D:\Temp\out1\daa_[speech]reverb.wav",
     )
-    out_dir = r"F:\Test\1.audio_test\3.out_data\tmp"
+    # out_dir = r"F:\Test\1.audio_test\3.out_data\tmp"
     # in_wav_path_or_list = list(Path(r"D:\Temp\out_wav").glob("*_a_noisy.wav"))
-    # out_dir = r"D:\Temp\out_wav"
+    out_dir = r"D:\Temp\tmp2"
     # ============ config end ============ #
 
     torch.set_grad_enabled(False)
@@ -302,6 +309,6 @@ def main():
 if __name__ == "__main__":
     main()
 
-    # net = Pytorch_DTLN_stateful(768, 256, 200, 0.25, 768)
+    # net = DTLN_Network(1024, 512, [128, 128], [2, 2], [0.25, 0.25], 512)
     # _print_networks([net])
     ...

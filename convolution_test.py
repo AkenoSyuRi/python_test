@@ -13,30 +13,28 @@ def scale_to_ref(tar_data, ref_data, eps=1e-7):
     return tar_data / cur_rms * ref_rms
 
 
-def get_truncated_rir(rir, fs, *, direct_range=(-0.006, 0.08)):
-    rir /= np.sum(rir)
+def get_truncated_rir(rir, sr, *, direct_range=(-0.001, 0.08)):
     rir_early = np.zeros_like(rir)
 
     peak_idx = np.argmax(np.abs(rir))
-    start_idx = max(0, peak_idx + int(fs * direct_range[0]))
-    end_idx = peak_idx + int(fs * direct_range[1])
+    start_idx = max(0, peak_idx + int(sr * direct_range[0]))
+    end_idx = peak_idx + int(sr * direct_range[1])
 
     rir[:start_idx] = 0
 
     rir_early[start_idx:end_idx] = rir[start_idx:end_idx]
 
-    # scale = 0.9 / np.max(np.abs([rir, rir_early]))
-    # rir *= scale
-    # rir_early *= scale
-    return rir, rir_early
+    rir_early = scale_to_ref(rir_early, rir)
+    return rir_early
 
 
 def get_rts_rir(
     rir,
-    original_T60: float,
-    direct_range=(-0.002, 0.08),
+    sr,
+    *,
+    original_T60=1.0,
     target_T60=0.05,
-    sr: int = 32000,
+    direct_range=(-0.001, 0.08),
 ):
     assert rir.ndim == 1, "rir must be a 1D array."
 
@@ -53,75 +51,112 @@ def get_rts_rir(
     win[end_idx:] = 10 ** (-q * np.arange(rir.shape[0] - end_idx))
     rts_rir = rir * win
 
-    # scale = 0.9 / np.max(np.abs([rir, rts_rir]))
-    # rir *= scale
-    # rts_rir *= scale
     rts_rir = scale_to_ref(rts_rir, rir)
-    return rir, rts_rir
+    return rts_rir
 
 
-out_dir = Path(r"D:\Temp\out1")
-# in_clean_path = r"F:\Test\1.audio_test\1.in_data\anechoic_room_speech.wav"
-in_clean_path = r"F:\BaiduNetdiskDownload\BZNSYP\Wave\007537.wav"
-# in_rir_path = r"F:\Test\3.dataset\3.rir\wedo_rk_out_speedup_rir\large_meeting_room_rk_out_3_speed_1.0.wav"
-in_rir_path = r"D:\Temp\gpu_rir\gpu_rir_10244_rt60_1.10s.wav"
+def get_decayed_and_attenuated_rir(
+    rir, sr, *, direct_range=(-0.001, 0.02), rd=0.2, t1=0.03, alpha=0.4
+):
+    # get decayed and attenuated function
+    t = np.arange((len(rir)))
+    t0 = int(sr * direct_range[1])
+    t1 = int(sr * t1)
+    rd = int(sr * rd)
 
-sr = 32000
+    y1 = 10 ** (-3 * (t - t0) / rd)
+    y1[:t0] = 1
 
-clean_data, _ = librosa.load(
-    in_clean_path,
-    sr=sr,
-)
+    y2 = (1 + alpha) / 2 + (1 - alpha) / 2 * np.cos(np.pi * (t - t0) / (t1 - t0))
+    y2[:t0] = 1
+    y2[t1:] = alpha
 
-rir_data, _ = librosa.load(
-    in_rir_path,
-    sr=sr,
-)
+    y = y1 * y2
 
-if bool(1):
-    tam, tar_rt60, ori_rt60 = 0.07, 0.05, 1.0
-    prefix = f"{Path(in_clean_path).stem};{Path(in_rir_path).stem};tam={tam};tar_rt60={tar_rt60};ori_rt60={ori_rt60};"
-    rir, rts_rir = get_rts_rir(
-        rir_data,
-        ori_rt60,
-        direct_range=(-0.002, tam),
-        target_T60=tar_rt60,
-    )
-else:
+    # apply function
+    peak_idx = np.argmax(np.abs(rir))
+    start_idx = max(0, peak_idx + int(sr * direct_range[0]))
+
+    rir[:start_idx] = 0
+
+    target_rir = rir.copy()
+    target_rir[peak_idx:] *= y[:-peak_idx] if peak_idx else y
+
+    target_rir = scale_to_ref(target_rir, rir)
+    return target_rir
+
+
+def process(in_clean_path, in_rir_path, out_dir, sr, use_func):
+    clean_data, _ = librosa.load(in_clean_path, sr=sr)
+    rir_data, _ = librosa.load(in_rir_path, sr=sr)
+
     direct_range = (-0.001, 0.001)
-    prefix = (
-        f"{Path(in_clean_path).stem};{Path(in_rir_path).stem};early={direct_range};"
+    target_type = {1: "early", 2: "rts", 3: "daa"}[use_func]
+    prefix = f"[{target_type}]{Path(in_clean_path).stem};{Path(in_rir_path).stem};direct={direct_range};"
+    if use_func == 1:
+        rir_target = get_truncated_rir(rir_data, sr, direct_range=direct_range)
+    elif use_func == 2:
+        tar_rt60, ori_rt60 = 0.60, 1.0
+        prefix += f"tar_rt60={tar_rt60};ori_rt60={ori_rt60};"
+        rir_target = get_rts_rir(
+            rir_data,
+            sr,
+            original_T60=ori_rt60,
+            target_T60=tar_rt60,
+            direct_range=direct_range,
+        )
+    elif use_func == 3:
+        rd, t1, alpha = 0.2, direct_range[1] + 0.01, 0.4
+        prefix += f"{rd=};{t1=};{alpha=};"
+        rir_target = get_decayed_and_attenuated_rir(
+            rir_data, sr, direct_range=direct_range, rd=rd, t1=t1, alpha=alpha
+        )
+    else:
+        raise NotImplementedError
+
+    reverb_data = signal.convolve(clean_data, rir_data)
+    label_data = signal.convolve(clean_data, rir_target)
+
+    scale = 0.95 / np.max(np.abs([reverb_data, label_data]))
+    reverb_data *= scale
+    label_data *= scale
+
+    out_dir.mkdir(exist_ok=True)
+
+    soundfile.write(
+        out_dir / f"{prefix}[speech]reverb_label.wav",
+        AudioUtils.merge_channels(reverb_data, label_data),
+        sr,
     )
-    rir, rts_rir = get_truncated_rir(rir_data, sr, direct_range=direct_range)
+    soundfile.write(
+        out_dir / f"{prefix}[speech]reverb.wav",
+        reverb_data,
+        sr,
+    )
+    soundfile.write(
+        out_dir / f"{prefix}[speech]label.wav",
+        label_data,
+        sr,
+    )
+    soundfile.write(
+        out_dir / f"{prefix}[rir]original_target.wav",
+        AudioUtils.merge_channels(rir_data, rir_target),
+        sr,
+    )
+    print(prefix)
+    ...
 
-reverb_data = signal.convolve(clean_data, rir)
-label_data = signal.convolve(clean_data, rts_rir)
-# label_data = scale_to_ref(label_data, reverb_data) * 0.944
 
-scale = 0.95 / np.max(np.abs([reverb_data, label_data]))
-reverb_data *= scale
-label_data *= scale
+if __name__ == "__main__":
+    out_dir = Path(r"D:\Temp\convolution_test_out_v7")
+    in_clean_path = r"F:\Test\1.audio_test\1.in_data\anechoic_room_speech_lzf.wav"
+    # in_rir_path = r"D:\Temp\rir_gen_simulated\rir_gen_1557_rt60_0.26s_p0.wav"
+    # in_rir_path = r"D:\Temp\rir_gen_simulated\rir_gen_7704_rt60_0.52s_p0.wav"
+    in_rir_path = r"D:\Temp\rir_gen_simulated\rir_gen_2098_rt60_1.10s_p0.wav"
 
-out_dir.mkdir(exist_ok=True)
+    sr = 16000
 
-soundfile.write(
-    out_dir / f"{prefix}[speech]reverb_label.wav",
-    AudioUtils.merge_channels(reverb_data, label_data),
-    sr,
-)
-soundfile.write(
-    out_dir / f"{prefix}[speech]reverb.wav",
-    reverb_data,
-    sr,
-)
-soundfile.write(
-    out_dir / f"{prefix}[speech]label.wav",
-    label_data,
-    sr,
-)
-soundfile.write(
-    out_dir / f"{prefix}[rir]original_target.wav",
-    AudioUtils.merge_channels(rir, rts_rir),
-    sr,
-)
-...
+    use_func = 2  # 1 for truncated_rir, 2 for rts_rir, 3 for daa_rir
+
+    process(in_clean_path, in_rir_path, out_dir, sr, use_func)
+    ...
