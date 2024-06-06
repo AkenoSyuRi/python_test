@@ -13,20 +13,15 @@ def load_and_check(in_wav_path, sr):
 
 
 if __name__ == "__main__":
-    sample_rate = 32000
-    out_wav_path = r"D:\Temp\11_mic_straight_line.wav"
+    sample_rate = 16000
+    out_wav_path = r"D:\Temp\pra_6mic_a163.3e61.5.wav"
     in_wav_path_list = [
-        r"D:\Temp\cma100_out\pick_0_offset_1_chn41.wav",
-        r"D:\Temp\cma100_out\pick_1_offset_1_chn42.wav",
-        r"D:\Temp\cma100_out\pick_2_offset_1_chn35.wav",
-        r"D:\Temp\cma100_out\pick_3_offset_1_chn36.wav",
-        r"D:\Temp\cma100_out\pick_4_offset_1_chn30.wav",
-        r"D:\Temp\cma100_out\pick_5_offset_1_chn39.wav",
-        r"D:\Temp\cma100_out\pick_6_offset_1_chn8.wav",
-        r"D:\Temp\cma100_out\pick_7_offset_1_chn12.wav",
-        r"D:\Temp\cma100_out\pick_8_offset_1_chn11.wav",
-        r"D:\Temp\cma100_out\pick_9_offset_1_chn54.wav",
-        r"D:\Temp\cma100_out\pick_10_offset_1_chn53.wav",
+        r"D:\Temp\pra_sim_out\pra_snr20_chn07.wav",
+        r"D:\Temp\pra_sim_out\pra_snr20_chn09.wav",
+        r"D:\Temp\pra_sim_out\pra_snr20_chn11.wav",
+        r"D:\Temp\pra_sim_out\pra_snr20_chn13.wav",
+        r"D:\Temp\pra_sim_out\pra_snr20_chn15.wav",
+        r"D:\Temp\pra_sim_out\pra_snr20_chn17.wav",
     ]
     FileUtils.ensure_dir(out_wav_path, is_file=True)
 

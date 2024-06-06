@@ -262,22 +262,24 @@ def main():
         window,
         sr,
         out_input,
-    ) = (512, 128, (128, 128), (3, 3), 256, "none", 16000, bool(0))
+    ) = (512, 128, (128, 128), (3, 3), 256, "none", 16000, bool(1))
     # in_pt_path_list = Path(r"F:\Test\1.audio_test\2.in_models\tmp").glob("*.pth")
     in_pt_path_list = [
         r"F:\Test\1.audio_test\2.in_models\dnsdrb\DTLN_0108_wMSE_dnsdrb_quater_rts0.4_pre1ms_finetune_NoFactor_ep100.pth",
     ]
     in_wav_path_or_list = (
-        r"F:\Test\1.audio_test\1.in_data\input.wav",
+        # r"F:\Test\1.audio_test\1.in_data\input.wav",
         # r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启.wav",
         # r"F:\Test\1.audio_test\1.in_data\大会议室_男声_降噪去混响测试_RK降噪开启_mic1.wav",
         # r"F:\Test\1.audio_test\1.in_data\小会议室_女声_降噪去混响测试.wav",
         # r"F:\Test\1.audio_test\1.in_data\中会议室_女声_降噪去混响测试.wav",
-        # r"D:\Temp\out1\daa_[speech]reverb.wav",
+        # r"F:\Projects\PycharmProjects\athena_signal_test\data\output\sim_c3_NS_AGC_BF1_DOA_6mic_z0_in.wav",
+        # r"F:\Projects\PycharmProjects\athena_signal_test\data\output\sim_c3_NS_AGC_BF1_DOA_6mic_z0_out.wav",
+        r"D:\Temp\大会议室_男声_降噪去混响测试_RK降噪开启_16k_01.wav",
     )
     # out_dir = r"F:\Test\1.audio_test\3.out_data\tmp"
     # in_wav_path_or_list = list(Path(r"D:\Temp\out_wav").glob("*_a_noisy.wav"))
-    out_dir = r"D:\Temp\tmp2"
+    out_dir = r"D:\Temp"
     # ============ config end ============ #
 
     torch.set_grad_enabled(False)
