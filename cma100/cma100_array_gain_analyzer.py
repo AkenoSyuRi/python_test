@@ -7,18 +7,20 @@ from time_utils import TimeUtils
 
 np.set_printoptions(suppress=True)
 
+
 class ArrayGainAnalyzer:
     def __init__(
         self,
         in_wav_path,
         freq_list=(153, 216, 300, 433, 613, 866, 1225, 1732, 2450, 3465, 4900, 6930),
-        freq_duration=2,
-        analyze_duration=1,
+        freq_duration=2,  # 单个频率持续播放2s
+        analyze_duration=1,  # 单个频率取1s进行分析
         angle_list=(0, 10, 20, 30, 40, 50, 60, 70, 80, 90),
-        angle_duration=32.2,
+        angle_duration=32.2,  # 当前角度到下一个角度相差32.2s
         win_len=512,
         win_inc=256,
     ):
+        """in_wav_path: L: bf_out, R: mic0_in"""
         self.in_data, self.sr = librosa.load(in_wav_path, sr=None, mono=False)
         assert self.in_data.shape[0] == 2, "must be a 2 channels audio file"
 
@@ -121,15 +123,17 @@ class ArrayGainAnalyzer:
         ...
 
 
-if __name__ == "__main__":
-    # in_wav_path = r"D:\Temp\20240509_指向性测试\【指向性测试V3】【消音室】【单频】【幅值x2】0~90°.wav"
-    # analyzer = ArrayGainAnalyzer(in_wav_path)
-    # analyzer.analyze("0:05.327")
-
-    in_wav_path = (
-        r"D:\Temp\20240513_test_pra\【pra仿真67mic】【单频】【+3dB】0~90°距离阵列4m.wav"
+def main():
+    in_wav_path = r"D:\Temp\anechoic_chamber_deg5.wav"
+    angle_list = (5, 15, 25, 35, 45, 55, 65, 75, 85)
+    analyzer = ArrayGainAnalyzer(
+        in_wav_path, angle_list=angle_list, angle_duration=29.50
     )
-    analyzer = ArrayGainAnalyzer(in_wav_path, angle_duration=26.50)
-    angles, freqs, gains = analyzer.analyze("0:01.468")
+    angles, freqs, gains = analyzer.analyze("0:09.743")
     # analyzer.plot_beam_pattern(angles, freqs, gains)
+    ...
+
+
+if __name__ == "__main__":
+    main()
     ...

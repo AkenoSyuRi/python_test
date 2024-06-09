@@ -14,14 +14,10 @@ def load_and_check(in_wav_path, sr):
 
 if __name__ == "__main__":
     sample_rate = 16000
-    out_wav_path = r"D:\Temp\pra_6mic_a163.3e61.5.wav"
+    out_wav_path = r"D:\Temp\cma100_mic22_28.wav"
     in_wav_path_list = [
-        r"D:\Temp\pra_sim_out\pra_snr20_chn07.wav",
-        r"D:\Temp\pra_sim_out\pra_snr20_chn09.wav",
-        r"D:\Temp\pra_sim_out\pra_snr20_chn11.wav",
-        r"D:\Temp\pra_sim_out\pra_snr20_chn13.wav",
-        r"D:\Temp\pra_sim_out\pra_snr20_chn15.wav",
-        r"D:\Temp\pra_sim_out\pra_snr20_chn17.wav",
+        r"D:\Temp\save_wav_out\in72chn_sorted_c0_split_mic28_c64.wav",
+        r"D:\Temp\save_wav_out\in72chn_sorted_c0_split_mic22_c06.wav",
     ]
     FileUtils.ensure_dir(out_wav_path, is_file=True)
 

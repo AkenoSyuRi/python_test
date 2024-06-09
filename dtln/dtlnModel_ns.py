@@ -275,7 +275,7 @@ def main():
         # r"F:\Test\1.audio_test\1.in_data\中会议室_女声_降噪去混响测试.wav",
         # r"F:\Projects\PycharmProjects\athena_signal_test\data\output\sim_c3_NS_AGC_BF1_DOA_6mic_z0_in.wav",
         # r"F:\Projects\PycharmProjects\athena_signal_test\data\output\sim_c3_NS_AGC_BF1_DOA_6mic_z0_out.wav",
-        r"D:\Temp\大会议室_男声_降噪去混响测试_RK降噪开启_16k_01.wav",
+        r"F:\Projects\PycharmProjects\ns_wrapper\data\input\ns_in_c0_16k.wav",
     )
     # out_dir = r"F:\Test\1.audio_test\3.out_data\tmp"
     # in_wav_path_or_list = list(Path(r"D:\Temp\out_wav").glob("*_a_noisy.wav"))
