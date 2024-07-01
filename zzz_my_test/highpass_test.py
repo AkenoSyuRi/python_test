@@ -14,7 +14,7 @@ def highpass_test1():
 
 
 def highpass_test2():
-    in_wav_path = r"data/input/in72chn_sorted_c0_split_mic00_c38.wav"
+    in_wav_path = r"F:\Test\4.play\test_noisy_record.wav"
     data, sr = librosa.load(in_wav_path, sr=None)
 
     data_new = np.zeros_like(data)
@@ -52,7 +52,7 @@ def highpass_test3():
 
 
 if __name__ == "__main__":
-    highpass_test1()
-    # highpass_test2()
+    # highpass_test1()
+    highpass_test2()
     # highpass_test3()
     ...

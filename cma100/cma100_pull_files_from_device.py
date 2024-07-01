@@ -39,7 +39,8 @@ def pull_files_to(files_pattern, save_files_to_dir: Path):
             # if apply_with_gain:
             #     apply_gain(save_wav_path)
         else:
-            print("pulled:", save_pcm_path)
+            # print("pulled:", save_pcm_path)
+            print(save_pcm_path)
     ...
 
 
